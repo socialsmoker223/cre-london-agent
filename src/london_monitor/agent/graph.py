@@ -223,7 +223,12 @@ def build_graph(service, provider: AgentProvider):
                     raise ValueError("; ".join(errors))
                 answer = candidate
                 break
-            except (ValidationError, ValueError):
+            except (ValidationError, ValueError) as exc:
+                reason = (
+                    "Malformed ResearchAnswer JSON"
+                    if isinstance(exc, ValidationError)
+                    else str(exc)
+                )
                 remaining = state["deadline"] - time.monotonic()
                 if attempt or remaining <= 0 or not state.get("answer_text"):
                     break
@@ -233,8 +238,12 @@ def build_graph(service, provider: AgentProvider):
                             *state["messages"],
                             {
                                 "role": "user",
-                                "content": "Repair JSON: use supported evidence IDs and numbers. "
-                                "Calculations need tool evidence. Return ResearchAnswer JSON only.",
+                                "content": (
+                                    f"The answer was rejected: {reason}. "
+                                    "Return corrected ResearchAnswer JSON only. "
+                                    "Use a non-numerical heading. Put numbers in cited claims. "
+                                    "Use valid evidence IDs. Calculations require tool evidence."
+                                ),
                             },
                         ],
                         [],
@@ -256,6 +265,7 @@ def build_graph(service, provider: AgentProvider):
         ):
             answer = None
         if answer is None:
+            state["trace"].failures.append("verification:invalid_answer")
             state["incomplete"] = True
             state["warnings"].append("Answer verification failed; showing source excerpts only.")
             from london_monitor.models import AnswerClaim

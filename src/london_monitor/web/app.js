@@ -30,8 +30,9 @@ function renderAnswer(data) {
   answer.replaceChildren();
   answer.classList.remove('hidden');
   text(answer, data.demo ? 'DEMO DATA · ANSWER' : 'MARKET ANSWER', 'div').className = 'answer-meta';
-  text(answer, 'Grounded market answer', 'h2');
-  text(answer, data.answer, 'p').className = 'answer-body';
+  const fallback = data.incomplete && data.answer.startsWith('Evidence-only fallback');
+  text(answer, fallback ? 'Source evidence' : 'Market answer', 'h2');
+  text(answer, fallback ? 'A verified synthesis is unavailable. Review the cited source excerpts below.' : data.answer, 'p').className = 'answer-body';
   if (data.incomplete) text(answer, 'This answer is incomplete; refresh or try again.', 'p');
   if (data.freshness) text(answer, `Freshness · ${data.freshness}`, 'p').className = 'answer-meta';
   (data.warnings || []).forEach((warning) => text(answer, warning, 'p'));
@@ -64,23 +65,31 @@ function renderAnswer(data) {
     answer.append(trace);
   }
   if (data.evidence?.length) {
-    const evidence = document.createElement('div');
+    const evidence = document.createElement('details');
     evidence.className = 'citations';
-    text(evidence, 'Evidence', 'h3');
-    data.evidence.forEach((item) => text(evidence, `${item.id} · ${item.excerpt}`, 'p'));
+    text(evidence, `Supporting excerpts (${data.evidence.length})`, 'summary');
+    data.evidence.forEach((item) => text(evidence, `${item.location || 'Source excerpt'} · ${item.excerpt}`, 'p'));
     answer.append(evidence);
   }
-  status.textContent = 'Answer ready.';
+  status.dataset.state = data.incomplete ? 'error' : 'success';
+  status.textContent = data.incomplete ? 'Answer ready with evidence gaps.' : 'Answer ready.';
 }
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const value = question.value.trim();
   if (value.length < 3) {
+    status.dataset.state = 'error';
+    question.setAttribute('aria-invalid', 'true');
+    question.focus();
     status.textContent = 'Please enter a question with at least three characters.';
     return;
   }
   const ask = $('#ask');
+  question.removeAttribute('aria-invalid');
+  status.dataset.state = 'loading';
+  form.setAttribute('aria-busy', 'true');
+  answer.classList.add('hidden');
   ask.disabled = true;
   status.textContent = 'Researching sources and checking evidence (up to three minutes)…';
   try {
@@ -96,9 +105,11 @@ form.addEventListener('submit', async (event) => {
     previousQuestion = value;
     if (result?.conversation_id) conversationId = result.conversation_id;
   } catch {
+    status.dataset.state = 'error';
     status.textContent = 'The monitor is temporarily unavailable. Please try again.';
   } finally {
     ask.disabled = false;
+    form.removeAttribute('aria-busy');
   }
 });
 
@@ -150,6 +161,7 @@ async function loadStatus() {
     $('#mode-badge').textContent = live ? 'LIVE MODE' : 'DEMO DATA';
     $('#mode-badge').classList.toggle('live-pill', live);
     $('#refresh').disabled = !live;
+    if (!live) $('#refresh-status').textContent = 'Refresh is available in live mode.';
   } catch {
     $('#mode-badge').textContent = 'STATUS UNAVAILABLE';
   }
@@ -174,6 +186,7 @@ $('#refresh').addEventListener('click', async () => {
   const button = $('#refresh');
   const refreshStatus = $('#refresh-status');
   button.disabled = true;
+  refreshStatus.dataset.state = 'loading';
   refreshStatus.textContent = 'Refreshing evidence (up to five minutes)…';
   try {
     const response = await fetch('/api/refresh', {
@@ -181,9 +194,11 @@ $('#refresh').addEventListener('click', async () => {
     });
     if (!response.ok) throw new Error();
     const data = await response.json();
+    refreshStatus.dataset.state = data.status === 'complete' ? 'success' : 'error';
     refreshStatus.textContent = `Refresh ${data.status}.`;
     await Promise.all([loadBriefing(), loadMetrics()]);
   } catch {
+    refreshStatus.dataset.state = 'error';
     refreshStatus.textContent = 'Refresh failed. Please try again.';
   } finally {
     button.disabled = false;

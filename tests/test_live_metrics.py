@@ -73,3 +73,37 @@ def test_followup_retains_tool_ids_and_known_evidence(live):
     )
     assert followup.citations and not followup.incomplete
     assert any(m.get("tool_call_id") == "lookup-1" for m in live.provider.calls[-1])
+
+
+def test_repair_explains_numeric_heading_rejection(live):
+    import json
+
+    from london_monitor.models import ChatRequest, ModelTurn
+
+    original = live.provider.complete
+    draft = None
+    repairs = []
+
+    def complete(messages, tools, timeout):
+        nonlocal draft
+        if not tools:
+            repairs.append(messages[-1]["content"])
+            return ModelTurn(content=json.dumps({**draft, "conclusion": "Office quality"}))
+        turn = original(messages, tools, timeout)
+        if turn.content:
+            draft = json.loads(turn.content)
+            draft["conclusion"] = "Office quality in 2026"
+            turn.content = json.dumps(draft)
+        return turn
+
+    live.provider.complete = complete
+    live.ingest(
+        IngestRequest(
+            title="Report",
+            publisher="Test",
+            text="Efficient offices attract occupiers seeking lower energy use.",
+        )
+    )
+    response = live.chat(ChatRequest(question="What supports efficient offices?"))
+    assert repairs and "Keep numerical conclusions in cited claims" in repairs[0]
+    assert not response.incomplete and response.citations
