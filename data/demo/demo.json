@@ -1,0 +1,433 @@
+{
+  "sources": [
+    {
+      "id": "demo-market-2025q4",
+      "title": "SYNTHETIC DEMO \u2014 London office market 2025 Q4",
+      "publisher": "Synthetic Demo Dataset",
+      "published_at": "2026-01-15",
+      "text": "SYNTHETIC DEMO dataset for 2025-Q4 London office market metrics and conditions. This is illustrative data only.",
+      "submarket": "London",
+      "category": "market_pulse",
+      "demo": true
+    },
+    {
+      "id": "demo-market-2026q1",
+      "title": "SYNTHETIC DEMO \u2014 London office market 2026 Q1",
+      "publisher": "Synthetic Demo Dataset",
+      "published_at": "2026-04-15",
+      "text": "SYNTHETIC DEMO dataset for 2026-Q1 London office market metrics and conditions. This is illustrative data only.",
+      "submarket": "London",
+      "category": "market_pulse",
+      "demo": true
+    },
+    {
+      "id": "demo-vacancy-survey-a",
+      "title": "SYNTHETIC DEMO \u2014 vacancy survey A",
+      "publisher": "Synthetic Demo Dataset",
+      "published_at": "2026-04-20",
+      "text": "SYNTHETIC DEMO vacancy survey with a deliberately conflicting 2026-Q1 City estimate.",
+      "submarket": "City",
+      "category": "metrics",
+      "demo": true
+    },
+    {
+      "id": "demo-vacancy-survey-b",
+      "title": "SYNTHETIC DEMO \u2014 vacancy survey B",
+      "publisher": "Synthetic Demo Dataset",
+      "published_at": "2026-04-21",
+      "text": "SYNTHETIC DEMO second vacancy survey with a deliberately conflicting 2026-Q1 City estimate.",
+      "submarket": "City",
+      "category": "metrics",
+      "demo": true
+    },
+    {
+      "id": "demo-supply-esg",
+      "title": "SYNTHETIC DEMO \u2014 supply and ESG commentary",
+      "publisher": "Synthetic Demo Dataset",
+      "published_at": "2026-04-25",
+      "text": "SYNTHETIC DEMO commentary: supply remains selective, ESG upgrades matter, and hybrid flight-to-quality supports well located efficient offices.",
+      "submarket": "London",
+      "category": "supply",
+      "demo": true
+    },
+    {
+      "id": "demo-demand",
+      "title": "SYNTHETIC DEMO \u2014 Occupier demand and flight-to-quality",
+      "publisher": "Synthetic Demo Dataset",
+      "published_at": "2026-04-25",
+      "text": "Office occupier demand in this synthetic scenario favours efficient Grade A buildings near transport. Flight-to-quality reflects a preference for amenity, energy performance and adaptable space, even where hybrid working reduces total desks. Older unrefurbished offices face weaker demand; this does not imply that all prime buildings will outperform.",
+      "submarket": "London",
+      "category": "demand",
+      "demo": true
+    },
+    {
+      "id": "demo-macro",
+      "title": "SYNTHETIC DEMO \u2014 Interest rates and occupier drivers",
+      "publisher": "Synthetic Demo Dataset",
+      "published_at": "2026-04-25",
+      "text": "In this synthetic scenario, lower interest rates may ease refinancing costs and support viable refurbishment, but borrowing margins and lender requirements still matter. Employment uncertainty can delay office leasing decisions. Hybrid working makes attendance patterns and space quality more important than headline headcount alone. These are scenario interpretations, not forecasts.",
+      "submarket": "London",
+      "category": "macro",
+      "demo": true
+    },
+    {
+      "id": "demo-westend",
+      "title": "SYNTHETIC DEMO \u2014 West End demand commentary",
+      "publisher": "Synthetic Demo Dataset",
+      "published_at": "2026-04-25",
+      "text": "In the synthetic West End scenario, limited large floorplates and occupier preference for central amenities support prime rents. Smaller available supply can leave tenants with fewer suitable options. This scenario explains the illustrative rent premium over City offices; it is not a live valuation.",
+      "submarket": "West End",
+      "category": "demand",
+      "demo": true
+    },
+    {
+      "id": "demo-city",
+      "title": "SYNTHETIC DEMO \u2014 City demand commentary",
+      "publisher": "Synthetic Demo Dataset",
+      "published_at": "2026-04-25",
+      "text": "The synthetic City scenario combines demand from professional services with competition from refurbished offices. Flight-to-quality favours efficient floorplates and transport access. Vacancy estimates differ between illustrative surveys; scope and building coverage must be reconciled before treating any one estimate as definitive.",
+      "submarket": "City",
+      "category": "demand",
+      "demo": true
+    },
+    {
+      "id": "demo-supply-risk",
+      "title": "SYNTHETIC DEMO \u2014 Supply pipeline and pre-let risks",
+      "publisher": "Synthetic Demo Dataset",
+      "published_at": "2026-04-25",
+      "text": "Synthetic supply pipeline risk centres on uncommitted future space and construction timing. Pre-lets reduce exposure to future leasing conditions, while refurbishment can improve energy performance but displace existing occupiers during works. Expected completion dates are plans rather than guarantees. Monitoring commitment and timing together is more useful than gross pipeline size alone.",
+      "submarket": "London",
+      "category": "supply",
+      "demo": true
+    },
+    {
+      "id": "demo-esg",
+      "title": "SYNTHETIC DEMO \u2014 ESG refurbishment and hybrid work",
+      "publisher": "Synthetic Demo Dataset",
+      "published_at": "2026-04-25",
+      "text": "In this synthetic office scenario, ESG and sustainability requirements favour efficient buildings and refurbishment opportunities. Hybrid working encourages collaborative amenity-rich space but can reduce leased area. Upgrading secondary stock may protect its appeal; retrofit cost and execution risk need assessment before investment.",
+      "submarket": "London",
+      "category": "esg",
+      "demo": true
+    }
+  ],
+  "metrics": [
+    {
+      "metric": "prime_rent",
+      "value": 82,
+      "unit": "GBP/sq ft/year",
+      "period": "2025-Q4",
+      "submarket": "City",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "grade_a_rent",
+      "value": 72,
+      "unit": "GBP/sq ft/year",
+      "period": "2025-Q4",
+      "submarket": "City",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "vacancy",
+      "value": 8.4,
+      "unit": "%",
+      "period": "2025-Q4",
+      "submarket": "City",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "take_up",
+      "value": 1.9,
+      "unit": "million sq ft",
+      "period": "2025-Q4",
+      "submarket": "City",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "prime_rent",
+      "value": 118,
+      "unit": "GBP/sq ft/year",
+      "period": "2025-Q4",
+      "submarket": "West End",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "grade_a_rent",
+      "value": 101,
+      "unit": "GBP/sq ft/year",
+      "period": "2025-Q4",
+      "submarket": "West End",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "vacancy",
+      "value": 6.8,
+      "unit": "%",
+      "period": "2025-Q4",
+      "submarket": "West End",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "take_up",
+      "value": 1.4,
+      "unit": "million sq ft",
+      "period": "2025-Q4",
+      "submarket": "West End",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "prime_rent",
+      "value": 60,
+      "unit": "GBP/sq ft/year",
+      "period": "2025-Q4",
+      "submarket": "Canary Wharf",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "grade_a_rent",
+      "value": 52,
+      "unit": "GBP/sq ft/year",
+      "period": "2025-Q4",
+      "submarket": "Canary Wharf",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "vacancy",
+      "value": 12.2,
+      "unit": "%",
+      "period": "2025-Q4",
+      "submarket": "Canary Wharf",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "take_up",
+      "value": 0.8,
+      "unit": "million sq ft",
+      "period": "2025-Q4",
+      "submarket": "Canary Wharf",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "prime_rent",
+      "value": 67,
+      "unit": "GBP/sq ft/year",
+      "period": "2025-Q4",
+      "submarket": "Midtown / Fringe",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "grade_a_rent",
+      "value": 56,
+      "unit": "GBP/sq ft/year",
+      "period": "2025-Q4",
+      "submarket": "Midtown / Fringe",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "vacancy",
+      "value": 10.1,
+      "unit": "%",
+      "period": "2025-Q4",
+      "submarket": "Midtown / Fringe",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "take_up",
+      "value": 0.7,
+      "unit": "million sq ft",
+      "period": "2025-Q4",
+      "submarket": "Midtown / Fringe",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "bank_rate",
+      "value": 4.25,
+      "unit": "%",
+      "period": "2025-Q4",
+      "submarket": "London",
+      "source_id": "demo-market-2025q4"
+    },
+    {
+      "metric": "prime_rent",
+      "value": 85,
+      "unit": "GBP/sq ft/year",
+      "period": "2026-Q1",
+      "submarket": "City",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "grade_a_rent",
+      "value": 75,
+      "unit": "GBP/sq ft/year",
+      "period": "2026-Q1",
+      "submarket": "City",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "vacancy",
+      "value": 7.9,
+      "unit": "%",
+      "period": "2026-Q1",
+      "submarket": "City",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "take_up",
+      "value": 2.1,
+      "unit": "million sq ft",
+      "period": "2026-Q1",
+      "submarket": "City",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "prime_rent",
+      "value": 121,
+      "unit": "GBP/sq ft/year",
+      "period": "2026-Q1",
+      "submarket": "West End",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "grade_a_rent",
+      "value": 104,
+      "unit": "GBP/sq ft/year",
+      "period": "2026-Q1",
+      "submarket": "West End",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "vacancy",
+      "value": 6.4,
+      "unit": "%",
+      "period": "2026-Q1",
+      "submarket": "West End",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "take_up",
+      "value": 1.6,
+      "unit": "million sq ft",
+      "period": "2026-Q1",
+      "submarket": "West End",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "prime_rent",
+      "value": 62,
+      "unit": "GBP/sq ft/year",
+      "period": "2026-Q1",
+      "submarket": "Canary Wharf",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "grade_a_rent",
+      "value": 54,
+      "unit": "GBP/sq ft/year",
+      "period": "2026-Q1",
+      "submarket": "Canary Wharf",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "vacancy",
+      "value": 11.7,
+      "unit": "%",
+      "period": "2026-Q1",
+      "submarket": "Canary Wharf",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "take_up",
+      "value": 0.9,
+      "unit": "million sq ft",
+      "period": "2026-Q1",
+      "submarket": "Canary Wharf",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "prime_rent",
+      "value": 69,
+      "unit": "GBP/sq ft/year",
+      "period": "2026-Q1",
+      "submarket": "Midtown / Fringe",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "grade_a_rent",
+      "value": 58,
+      "unit": "GBP/sq ft/year",
+      "period": "2026-Q1",
+      "submarket": "Midtown / Fringe",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "vacancy",
+      "value": 9.7,
+      "unit": "%",
+      "period": "2026-Q1",
+      "submarket": "Midtown / Fringe",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "take_up",
+      "value": 0.8,
+      "unit": "million sq ft",
+      "period": "2026-Q1",
+      "submarket": "Midtown / Fringe",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "bank_rate",
+      "value": 4.0,
+      "unit": "%",
+      "period": "2026-Q1",
+      "submarket": "London",
+      "source_id": "demo-market-2026q1"
+    },
+    {
+      "metric": "vacancy",
+      "value": 8.3,
+      "unit": "%",
+      "period": "2026-Q1",
+      "submarket": "City",
+      "source_id": "demo-vacancy-survey-a"
+    },
+    {
+      "metric": "vacancy",
+      "value": 7.5,
+      "unit": "%",
+      "period": "2026-Q1",
+      "submarket": "City",
+      "source_id": "demo-vacancy-survey-b"
+    }
+  ],
+  "projects": [
+    {
+      "name": "SYNTHETIC DEMO \u2014 Rivergate House",
+      "submarket": "City",
+      "status": "under construction",
+      "completion_date": "2026-09-30",
+      "size_sq_ft": 180000,
+      "prelet_status": "35% prelet",
+      "source_id": "demo-supply-esg"
+    },
+    {
+      "name": "SYNTHETIC DEMO \u2014 West End Exchange",
+      "submarket": "West End",
+      "status": "planned",
+      "completion_date": "2027-06-30",
+      "size_sq_ft": 240000,
+      "prelet_status": "10% prelet",
+      "source_id": "demo-supply-esg"
+    },
+    {
+      "name": "SYNTHETIC DEMO \u2014 Wharf Retrofit",
+      "submarket": "Canary Wharf",
+      "status": "refurbishment",
+      "completion_date": "2026-12-31",
+      "size_sq_ft": 150000,
+      "prelet_status": "60% prelet",
+      "source_id": "demo-supply-esg"
+    }
+  ]
+}
