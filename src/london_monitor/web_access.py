@@ -1,11 +1,10 @@
 import ipaddress
-import os
 import socket
-import time
 from datetime import date
 from urllib.parse import urlsplit
 
 import httpx
+from ddgs import DDGS
 
 from london_monitor.models import ScrapedPage, ScrapeQuery, WebHit, WebSearchQuery
 
@@ -52,100 +51,76 @@ def _public_url(url: str) -> str:
     return url
 
 
-def _remaining(deadline: float) -> float:
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        raise TimeoutError("web request deadline exceeded")
-    return remaining
 
-
-def _parse_hits(data: dict) -> list[WebHit]:
-    payload = data.get("data", data)
-    hits = payload.get("web", []) if isinstance(payload, dict) else payload
-    if not isinstance(hits, list):
-        raise ValueError("Firecrawl returned no search results")
-    return [
-        WebHit(
-            url=item["url"],
-            title=item.get("title", ""),
-            description=item.get("description", item.get("snippet", "")),
-            trusted=_is_trusted(item["url"]),
-        )
-        for item in hits
-        if isinstance(item, dict) and item.get("url")
-    ]
-
-
-class FirecrawlClient:
-    def __init__(self, base_url: str = "http://localhost:3002", api_key: str | None = None) -> None:
+class WebResearchClient:
+    def __init__(self, base_url: str, api_token: str, backend: str = "auto") -> None:
         self.base_url = base_url.rstrip("/")
-        self.api_key = api_key if api_key is not None else os.environ.get("FIRECRAWL_API_KEY")
+        self.api_token = api_token
+        self.backend = backend
 
-    def _request(self, path: str, payload: dict, timeout: float) -> dict:
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+    def search(self, query: WebSearchQuery, timeout: float = 30) -> list[WebHit]:
+        rows = DDGS(timeout=timeout).text(
+            query.query, region="uk-en", backend=self.backend, max_results=query.limit * 2
+        )
+        hits = [
+            WebHit(
+                url=row["href"], title=row.get("title", ""),
+                description=row.get("body", ""), trusted=_is_trusted(row["href"]),
+            )
+            for row in rows if row.get("href")
+        ]
+        if query.trusted_first:
+            hits.sort(key=lambda hit: not hit.trusted)
+        return hits[:query.limit]
+
+    def scrape(self, query: ScrapeQuery, timeout: float = 60) -> ScrapedPage:
+        url = _public_url(str(query.url))
+        is_pdf = urlsplit(url).path.lower().endswith(".pdf")
+        params = {
+            "cache_mode": {"type": "CacheMode", "params": "bypass"},
+            "page_timeout": max(1, int(timeout * 1000)),
+            "wait_until": "domcontentloaded",
+        }
+        if is_pdf:
+            params["scraping_strategy"] = {
+                "type": "PDFContentScrapingStrategy",
+                "params": {"max_pdf_bytes": 20_000_000, "max_pdf_pages": 100},
+            }
         response = httpx.post(
-            f"{self.base_url}{path}", json=payload, headers=headers, timeout=timeout
+            f"{self.base_url}/crawl",
+            headers={"Authorization": f"Bearer {self.api_token}"},
+            json={
+                "urls": [url],
+                "browser_config": {"type": "BrowserConfig", "params": {"headless": True}},
+                "crawler_config": {"type": "CrawlerRunConfig", "params": params},
+            },
+            timeout=timeout,
         )
         response.raise_for_status()
         data = response.json()
-        if not isinstance(data, dict) or data.get("success") is False:
-            raise ValueError("Firecrawl request failed")
-        return data
-
-    def search(self, query: WebSearchQuery, timeout: float = 30) -> list[WebHit]:
-        deadline = time.monotonic() + timeout
-        sites = " OR ".join(f"site:{domain}" for domain in TRUSTED_DOMAINS)
-        trusted_query = f"({sites}) ({query.query})"
-        first = (
-            _parse_hits(
-                self._request(
-                    "/v2/search",
-                    {"query": trusted_query, "limit": query.limit},
-                    _remaining(deadline),
-                )
-            )
-            if query.trusted_first
-            else []
-        )
-        if query.trusted_first and any(hit.trusted for hit in first):
-            return [hit for hit in first if hit.trusted] + [hit for hit in first if not hit.trusted]
-        return _parse_hits(
-            self._request(
-                "/v2/search", {"query": query.query, "limit": query.limit}, _remaining(deadline)
-            )
-        )
-
-    def scrape(self, query: ScrapeQuery, timeout: float = 60) -> ScrapedPage:
-        deadline = time.monotonic() + timeout
-        url = _public_url(str(query.url))
-        data = self._request(
-            "/v2/scrape", {"url": url, "formats": ["markdown"]}, _remaining(deadline)
-        )
-        payload = data.get("data", data)
-        metadata = payload.get("metadata") if isinstance(payload, dict) else {}
-        metadata = metadata or {}
-        text = payload.get("markdown") if isinstance(payload, dict) else None
-        title = (
-            metadata.get("title")
-            or (payload.get("title") if isinstance(payload, dict) else None)
-            or url
-        )
-        publisher = metadata.get("ogSiteName") or (urlsplit(url).hostname or "")
-        if not text or any(term in text.lower() for term in ("paywall", "subscribe to read")):
-            raise ValueError("Firecrawl returned blocked or unreadable content")
-        published = metadata.get("publishedTime") or metadata.get("published_at")
+        results = data.get("results") or []
+        if not data.get("success") or not results:
+            raise ValueError("Crawl4AI returned no crawl result")
+        result = results[0]
+        if not result.get("success"):
+            reason = result.get("error_message") or "unknown error"
+            raise ValueError(f"Crawl4AI failed: {reason[:240]}")
+        markdown = result.get("markdown") or {}
+        text = markdown.get("raw_markdown", "") if isinstance(markdown, dict) else markdown
+        if not text.strip() or any(term in text.lower() for term in (
+            "subscribe to read", "verify you are human", "just a moment..."
+        )):
+            raise ValueError("Crawl4AI returned blocked or unreadable content")
+        metadata = result.get("metadata") or {}
+        published = metadata.get("article:published_time") or metadata.get("published_time")
         try:
-            parsed_date = date.fromisoformat(published[:10]) if published else None
+            published_at = date.fromisoformat(published[:10]) if published else None
         except (TypeError, ValueError):
-            parsed_date = None
-        final_url = _public_url(metadata.get("url") or metadata.get("sourceURL") or url)
+            published_at = None
+        final_url = _public_url(result.get("redirected_url") or result.get("url") or url)
         return ScrapedPage(
-            url=final_url,
-            title=title,
-            publisher=publisher,
-            text=text,
-            published_at=parsed_date,
-            trusted=_is_trusted(final_url),
+            url=final_url, title=metadata.get("title") or url,
+            publisher=metadata.get("og:site_name") or urlsplit(final_url).hostname,
+            text=text, published_at=published_at, trusted=_is_trusted(final_url),
+            source_type="pdf" if is_pdf else "html",
         )

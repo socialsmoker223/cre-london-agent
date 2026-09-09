@@ -11,6 +11,7 @@ def test_only_explicit_live_provider_configuration_is_accepted(monkeypatch):
         "LLM_MODEL": "glm-5.3-flash",
         "ZAI_API_BASE": "https://api.z.ai/api/coding/paas/v4",
         "LONDON_MODE": "live",
+        "CRAWL4AI_API_TOKEN": "configuration-test-token",
     }
     for key, value in values.items():
         monkeypatch.setenv(key, value)

@@ -1,9 +1,12 @@
+import asyncio
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
+from threading import Event
 from typing import Annotated, Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .models import (
@@ -62,6 +65,54 @@ def create_app(service: Any | None = None) -> FastAPI:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except Exception as exc:
             raise _service_error() from exc
+
+    @app.post("/api/chat/stream")
+    async def chat_stream(payload: ChatRequest, request: Request):
+        async def events():
+            loop = asyncio.get_running_loop()
+            queue = asyncio.Queue()
+            stopped = Event()
+
+            def emit(event):
+                # Cancellation is checked between bounded model/tool calls.
+                if stopped.is_set():
+                    raise asyncio.CancelledError()
+                loop.call_soon_threadsafe(queue.put_nowait, event)
+
+            def run():
+                try:
+                    result = request.app.state.service.chat(payload, emit=emit)
+                    emit({"type": "result", "data": result.model_dump(mode="json")})
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:
+                    if not stopped.is_set():
+                        emit({
+                            "type": "error",
+                            "message": str(exc) if isinstance(exc, ProviderUnavailable)
+                            else "The market service could not complete the request.",
+                        })
+
+            task = asyncio.create_task(asyncio.to_thread(run))
+            try:
+                yield 'data: {"type":"activity","message":"Starting research"}\n\n'
+                while True:
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=10)
+                    except TimeoutError:
+                        yield ": keep-alive\n\n"
+                        continue
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                    if event["type"] in {"result", "error"}:
+                        break
+            finally:
+                stopped.set()
+                task.cancel()
+
+        return StreamingResponse(
+            events(), media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.get("/api/sources", response_model=list[Source])
     def sources(request: Request) -> list[Source]:

@@ -5,7 +5,7 @@
 `models.py` owns all typed contracts. `Settings.from_env()` loads .env without overriding
 exported variables and requires LLM_PROVIDER=z.ai, ZAI_API_KEY, ZAI_API_BASE and LLM_MODEL.
 `MarketService(data_dir=None)` constructs the configured provider, remote Qdrant retrieval
-and Firecrawl client. SQLite lives in data_dir/live. There is no demo/offline runtime or
+and WebResearchClient. SQLite lives in data_dir/live. There is no demo/offline runtime or
 provider injection at the service boundary. Legacy synthetic sources are excluded.
 
 Live graph: START → retrieve → agent → tools → agent (bounded loop) → verify → END.
@@ -13,7 +13,7 @@ Initial retrieval supplies actual stored evidence even when the configured endpo
 choice. Follow-ups reuse the saved evidence and complete prior transcript. `AgentProvider.complete(messages, tools, timeout)->ModelTurn` preserves assistant tool-call
 IDs and keeps provider reasoning only in private conversation state, never API traces. Live provider is `ZaiProvider()` using
 ZAI_API_KEY/ZAI_API_BASE/LLM_MODEL. Missing credentials fail explicitly; no model or
-billing-route fallback. `FirecrawlClient(base_url)` implements WebClient.
+billing-route fallback. `WebResearchClient(base_url, api_token)` implements WebClient: `ddgs` with configurable DDGS_BACKEND (default auto) for discovery and authenticated Crawl4AI /crawl for HTML/PDF extraction.
 
 `VectorIndex(path=None, *, url=None, embedder=None, cache_dir=None)` uses FastEmbed
 BAAI/bge-small-en-v1.5, 384 dimensions, a new named collection, validates model identity.
@@ -43,16 +43,29 @@ GET /api/status exposes refresh progress and provider/model; GET /api/refresh ex
 a bounded synchronous refresh. Chat retains JSON response and adds mode/incomplete/evidence/
 conversation_id/freshness. UI opts into prior conversation, never puts secrets in responses.
 
+`POST /api/chat/stream` accepts the same ChatRequest and emits SSE JSON events: `activity`
+(message), then exactly one terminal `result` (ChatResponse in data) or `error` (safe message).
+The graph emits activity before retrieval, model rounds, tool calls and verification, with
+completion/failure updates. Reasoning and unverified model output stay private; the grounded
+answer arrives after verification. The synchronous JSON endpoint remains available.
+A worker thread runs research while the async response sends events and ten-second keepalives;
+proxy buffering is disabled. Disconnect/Stop prevents subsequent graph steps at the next
+progress callback; an already-running model or tool call finishes under its existing timeout.
+The browser incrementally decodes UTF-8 frames, shows elapsed time and an expandable activity
+log, and retains the last answer on failure, disconnect or Stop. Truncated streams are errors.
+
+
 ## Trust and budgets
 
 Live chat permits six tool rounds, three searches, six scrapes, 180 seconds total.
 Tools are query_market_metrics, search_market_evidence, search_web, scrape_source.
 Search snippets cannot ground final facts; full extracted content must be ingested first.
-Source URLs must be public HTTP(S), without credentials or unsafe redirects. Firecrawl
-is a trusted localhost service but fetched websites are untrusted. Its browser/fetch paths
-block private-network destinations using the pinned upstream safeFetch and Playwright DNS/socket guards.
-The app only resolves target addresses; all downloads and redirect handling run in Firecrawl,
-including native text PDF parsing. There is no second direct HTTP download path. Interpretation must be distinguished from
+Source URLs must be public HTTP(S), without credentials. The app checks addresses before each
+crawl. Pinned Crawl4AI 0.9.3 applies its DNS-pinning egress broker to Chromium and validates
+PDF redirect destinations and connected peers. Custom hooks and LLM extraction are not used.
+Crawl4AI runs separately with its own API token; the configured model's key stays in the app.
+DuckDuckGo SDK errors propagate to the tool/refresh failure records; auto mode selects available engines; DDGS_BACKEND=duckduckgo restricts it to DuckDuckGo. Source pages remain untrusted data.
+Interpretation must be distinguished from
 facts and deterministic calculations. IDs and numerical provenance are checked; these
 checks do not prove that a source is true. One malformed answer repair is allowed.
 
@@ -72,9 +85,6 @@ Failed chat requests preserve the previous browser answer. Refresh failures expo
 and retry guidance. Metric rows expose source URLs, publication/retrieval dates, definitions
 and verbatim quotations. A duplicate document without metrics retries extraction.
 
-Firecrawl may report HTTP 200 with an empty search payload when its search backend is blocked.
-The app treats this as missing coverage; inspect Firecrawl logs to distinguish an empty search
-from upstream anti-bot rejection. Do not infer a stable market from an unsuccessful refresh.
 
 Chat collection calls `collect(..., with_metrics=False)`: source text is sufficient for cited
 reported facts. Refresh performs metric extraction for SQL comparisons; this avoids spending

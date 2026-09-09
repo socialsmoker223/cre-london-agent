@@ -130,7 +130,7 @@ def build():
         5.85,
         11.5,
         0.65,
-        "z.ai chooses tools • Firecrawl reads sources • FastEmbed + Qdrant retrieves • "
+        "z.ai chooses tools • DDGS + Crawl4AI reads sources • FastEmbed + Qdrant retrieves • "
         "SQLite preserves observations",
         13,
         RGBColor(174, 200, 198),
@@ -238,7 +238,7 @@ def build():
         3.8,
         "Remaining blocker",
         "Free host disk capacity and restore Docker health.\n\n"
-        "Then verify Firecrawl search + scrape, full Compose startup and persistence.",
+        "Verify DuckDuckGo search, Crawl4AI HTML/PDF extraction and source freshness.",
     )
     OUT.parent.mkdir(exist_ok=True)
     prs.save(OUT)

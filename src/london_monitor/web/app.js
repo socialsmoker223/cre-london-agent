@@ -8,6 +8,7 @@ let previousQuestion = null;
 let conversationId = null;
 let refreshTimer = null;
 let refreshPending = false;
+let chatController = null;
 context.disabled = true;
 
 document.querySelectorAll('.examples button').forEach((button) => button.addEventListener('click', () => {
@@ -98,8 +99,48 @@ function renderAnswer(data, askedQuestion) {
   status.textContent = data.insufficient_evidence ? 'See the scope or evidence limitation below.' : data.incomplete ? 'Answer ready with evidence gaps.' : 'Answer ready.';
 }
 
+async function streamChat(payload, signal, onActivity) {
+  const response = await fetch('/api/chat/stream', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload), signal,
+  });
+  if (!response.ok) {
+    const data = await response.json();
+    throw new Error(typeof data.detail === 'string' ? data.detail : 'Please check your request and retry.');
+  }
+  if (!response.body) throw new Error('Streaming is unavailable in this browser.');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    while (true) {
+      const {value, done} = await reader.read();
+      buffer += decoder.decode(value, {stream: !done});
+      let boundary;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        const data = frame.split('\n').filter(line => line.startsWith('data:'))
+          .map(line => line.slice(5).trimStart()).join('\n');
+        if (!data) continue;
+        const event = JSON.parse(data);
+        if (event.type === 'activity') onActivity(event.message);
+        if (event.type === 'error') throw new Error(event.message);
+        if (event.type === 'result') return event.data;
+      }
+      if (done) throw new Error('The research stream ended before an answer arrived. Please retry.');
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
+$('#stop').addEventListener('click', () => chatController?.abort());
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (chatController) return;
   const value = question.value.trim();
   if (value.length < 3) {
     status.dataset.state = 'error';
@@ -109,33 +150,65 @@ form.addEventListener('submit', async (event) => {
     return;
   }
   const ask = $('#ask');
+  const stop = $('#stop');
+  const activity = $('#activity');
+  const steps = $('#activity-steps');
+  const summary = $('#activity-summary');
   question.removeAttribute('aria-invalid');
   status.dataset.state = 'loading';
   form.setAttribute('aria-busy', 'true');
   ask.disabled = true;
-  status.textContent = 'Researching sources and checking evidence (up to three minutes). Your last answer stays visible below.';
+  stop.classList.remove('hidden');
+  activity.classList.remove('hidden');
+  activity.open = true;
+  activity.dataset.state = 'loading';
+  steps.replaceChildren();
+  $('#activity-question').textContent = value;
+  chatController = new AbortController();
   const started = Date.now();
-  const timer = setInterval(() => {
-    status.textContent = `Researching sources and checking evidence · ${Math.round((Date.now() - started) / 1000)}s elapsed…`;
-  }, 10000);
+  let stage = 'Connecting to research service';
+  const updateStatus = () => {
+    const elapsed = Math.floor((Date.now() - started) / 1000);
+    summary.textContent = `Research activity · ${elapsed}s`;
+    status.textContent = `${stage}…`;
+  };
+  updateStatus();
+  activity.scrollIntoView({block: 'nearest'});
+  const timer = setInterval(updateStatus, 1000);
   try {
     const payload = { question: value };
     if (context.checked && previousQuestion) payload.previous_question = previousQuestion;
     if (context.checked && conversationId) payload.conversation_id = conversationId;
-    const result = await requestJson('/api/chat', {
-      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
+    const result = await streamChat(payload, chatController.signal, message => {
+      stage = message;
+      const follow = steps.scrollHeight - steps.scrollTop - steps.clientHeight < 40;
+      const item = text(steps, message, 'li');
+      text(item, `${Math.floor((Date.now() - started) / 1000)}s`, 'time');
+      if (follow) steps.scrollTop = steps.scrollHeight;
+      updateStatus();
     });
+    clearInterval(timer);
     renderAnswer(result, value);
+    activity.dataset.state = result.incomplete ? 'error' : 'success';
+    summary.textContent = `Research ${result.incomplete ? 'completed with gaps' : 'complete'} · ${Math.floor((Date.now() - started) / 1000)}s`;
+    activity.open = false;
     previousQuestion = value;
     if (result?.conversation_id) conversationId = result.conversation_id;
     context.disabled = false;
     await loadMetrics();
   } catch (error) {
+    clearInterval(timer);
+    const stopped = error.name === 'AbortError';
+    activity.dataset.state = stopped ? 'stopped' : 'error';
+    summary.textContent = `Research ${stopped ? 'stopped' : 'interrupted'} · ${Math.floor((Date.now() - started) / 1000)}s`;
     status.dataset.state = 'error';
-    status.textContent = `${error.message === 'Failed to fetch' ? 'The monitor is unavailable. Please retry.' : error.message} Your last answer has been kept.`;
+    status.textContent = `${stopped ? 'Research stopped.' : error.message === 'Failed to fetch' ? 'The monitor is unavailable. Please retry.' : error.message} Your last answer has been kept.`;
   } finally {
     clearInterval(timer);
+    chatController = null;
     ask.disabled = false;
+    if (document.activeElement === stop) ask.focus();
+    stop.classList.add('hidden');
     form.removeAttribute('aria-busy');
   }
 });
@@ -243,7 +316,7 @@ async function loadBriefing() {
         const list = document.createElement('ul');
         data.failures.forEach(failure => text(list, failure, 'li'));
         failures.append(list);
-        text(failures, 'Retry refresh to recheck searches and extraction. If all topics return no results, check Firecrawl logs for search-provider blocking or quota errors before retrying. Existing evidence is retained.', 'p');
+        text(failures, 'Retry refresh to recheck searches and extraction. If all topics return no results, check DuckDuckGo search errors or Crawl4AI logs before retrying. Existing evidence is retained.', 'p');
         briefing.append(failures);
       }
     }

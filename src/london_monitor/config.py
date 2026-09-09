@@ -15,7 +15,9 @@ class Settings(Model):
     api_base: str = Field(min_length=1)
     data_dir: Path = Path(".runtime")
     qdrant_url: str = "http://localhost:6333"
-    firecrawl_url: str = "http://localhost:3002"
+    ddgs_backend: str = "auto"
+    crawl4ai_url: str = "http://localhost:11235"
+    crawl4ai_token: SecretStr = Field(min_length=1)
     embedding_cache: Path = Path(".runtime/embeddings")
 
     @classmethod
@@ -23,7 +25,9 @@ class Settings(Model):
         load_dotenv(override=False)
         if os.getenv("LONDON_MODE", "live") != "live":
             raise ValueError("Only live mode is supported; remove LONDON_MODE or set it to live.")
-        required = ("LLM_PROVIDER", "ZAI_API_KEY", "LLM_MODEL", "ZAI_API_BASE")
+        required = (
+            "LLM_PROVIDER", "ZAI_API_KEY", "LLM_MODEL", "ZAI_API_BASE", "CRAWL4AI_API_TOKEN"
+        )
         missing = [name for name in required if not os.getenv(name, "").strip()]
         if missing:
             raise ValueError(f"Missing required configuration: {', '.join(missing)}")
@@ -36,6 +40,8 @@ class Settings(Model):
             api_base=os.environ["ZAI_API_BASE"].strip(),
             data_dir=Path(os.getenv("LONDON_DATA_DIR", ".runtime")),
             qdrant_url=os.getenv("QDRANT_URL") or "http://localhost:6333",
-            firecrawl_url=os.getenv("FIRECRAWL_URL") or "http://localhost:3002",
+            ddgs_backend=os.getenv("DDGS_BACKEND") or "auto",
+            crawl4ai_url=os.getenv("CRAWL4AI_URL") or "http://localhost:11235",
+            crawl4ai_token=os.environ["CRAWL4AI_API_TOKEN"].strip(),
             embedding_cache=Path(os.getenv("EMBEDDING_CACHE", ".runtime/embeddings")),
         )

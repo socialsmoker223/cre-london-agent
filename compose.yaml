@@ -8,7 +8,9 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:?Set LLM_PROVIDER to z.ai}
       LONDON_DATA_DIR: /app/.runtime
       QDRANT_URL: http://qdrant:6333
-      FIRECRAWL_URL: http://firecrawl-api:3002
+      DDGS_BACKEND: ${DDGS_BACKEND:-auto}
+      CRAWL4AI_URL: http://crawl4ai:11235
+      CRAWL4AI_API_TOKEN: ${CRAWL4AI_API_TOKEN:?Set CRAWL4AI_API_TOKEN}
       EMBEDDING_CACHE: /app/.runtime/embeddings
       ZAI_API_KEY: ${ZAI_API_KEY:?Set ZAI_API_KEY}
       ZAI_API_BASE: ${ZAI_API_BASE:?Set ZAI_API_BASE}
@@ -18,7 +20,7 @@ services:
     depends_on:
       qdrant:
         condition: service_healthy
-      firecrawl-api:
+      crawl4ai:
         condition: service_healthy
     ports:
       - "127.0.0.1:8000:8000"
@@ -45,100 +47,20 @@ services:
       timeout: 5s
       retries: 12
 
-  firecrawl-api:
-    build:
-      context: .runtime/firecrawl/apps/api
+  crawl4ai:
+    image: unclecode/crawl4ai:0.9.3
     environment:
-      HOST: 0.0.0.0
-      PORT: 3002
-      ENV: local
-      REDIS_URL: redis://redis:6379
-      REDIS_RATE_LIMIT_URL: redis://redis:6379
-      PLAYWRIGHT_MICROSERVICE_URL: http://playwright-service:3000/scrape
-      POSTGRES_HOST: nuq-postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
-      USE_DB_AUTHENTICATION: "false"
-      NUQ_BACKEND: pg
-      NUQ_RABBITMQ_URL: amqp://rabbitmq:5672
-      ALLOW_LOCAL_WEBHOOKS: "false"
-      MODEL_NAME: ${FIRECRAWL_MODEL_NAME:-}
-      MODEL_EMBEDDING_NAME: ${FIRECRAWL_MODEL_EMBEDDING_NAME:-}
-      LOGGING_LEVEL: ${FIRECRAWL_LOGGING_LEVEL:-info}
-    depends_on:
-      redis:
-        condition: service_healthy
-      nuq-postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      playwright-service:
-        condition: service_healthy
+      CRAWL4AI_API_TOKEN: ${CRAWL4AI_API_TOKEN:?Set CRAWL4AI_API_TOKEN}
     networks: [backend]
     ports:
-      - "127.0.0.1:3002:3002"
-    command: ["node", "dist/src/harness.js", "--start-docker"]
+      - "127.0.0.1:11235:11235"
+    shm_size: 1gb
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/v0/health/liveness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "curl", "-f", "http://localhost:11235/health"]
       interval: 10s
       timeout: 5s
       retries: 18
       start_period: 30s
-
-  playwright-service:
-    build:
-      context: .runtime/firecrawl/apps/playwright-service-ts
-    environment:
-      PORT: 3000
-      ALLOW_LOCAL_WEBHOOKS: "false"
-      BLOCK_MEDIA: ${BLOCK_MEDIA:-true}
-      MAX_CONCURRENT_PAGES: ${CRAWL_CONCURRENT_REQUESTS:-10}
-    networks: [backend]
-    security_opt: [no-new-privileges:true]
-    cap_drop: [ALL]
-    tmpfs:
-      - /tmp/.cache:noexec,nosuid,size=1g
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 10s
-      timeout: 5s
-      retries: 18
-      start_period: 30s
-
-  redis:
-    image: redis:7.4-alpine
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
-    networks: [backend]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-
-  rabbitmq:
-    image: rabbitmq:3.13-management-alpine
-    networks: [backend]
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-
-  nuq-postgres:
-    build:
-      context: .runtime/firecrawl/apps/nuq-postgres
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
-    networks: [backend]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
 
 networks:
   backend:

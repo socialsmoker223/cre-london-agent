@@ -3,6 +3,7 @@ import logging
 import re
 import time
 from collections import OrderedDict, defaultdict
+from collections.abc import Callable
 from itertools import combinations
 from pathlib import Path
 from threading import Lock, RLock
@@ -32,7 +33,7 @@ class MarketService:
         from london_monitor.db import Database
         from london_monitor.provider import ZaiProvider
         from london_monitor.retrieval import VectorIndex
-        from london_monitor.web_access import FirecrawlClient
+        from london_monitor.web_access import WebResearchClient
 
         settings = Settings.from_env()
         self.provider = ZaiProvider(settings)
@@ -50,17 +51,21 @@ class MarketService:
         except Exception:
             self.store.close()
             raise
-        self.web = FirecrawlClient(settings.firecrawl_url)
+        self.web = WebResearchClient(
+            settings.crawl4ai_url, settings.crawl4ai_token.get_secret_value(), settings.ddgs_backend
+        )
         self.graph = build_graph(self, self.provider)
 
-    def chat(self, request: ChatRequest) -> ChatResponse:
+    def chat(
+        self, request: ChatRequest, emit: Callable[[dict], None] | None = None
+    ) -> ChatResponse:
         session_id = request.conversation_id or str(uuid4())
         request = request.model_copy(update={"conversation_id": session_id})
         with self.lock:
             history, evidence = self.conversations.get(session_id, ([], {}))
         transcript = []
         refs = {}
-        response = run_graph(self.graph, request, history, evidence, transcript, refs)
+        response = run_graph(self.graph, request, history, evidence, transcript, refs, emit)
         response.conversation_id = session_id
         with self.lock:
             # ponytail: retain one complete tool transcript; persist sessions if needed.
