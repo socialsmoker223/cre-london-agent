@@ -1,4 +1,3 @@
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
@@ -15,6 +14,8 @@ from .models import (
     Metric,
     MetricName,
     MetricQuery,
+    RefreshRequest,
+    RefreshResult,
     Source,
     Submarket,
 )
@@ -35,7 +36,7 @@ def create_app(service: Any | None = None) -> FastAPI:
         if owned:
             from .service import MarketService
 
-            app.state.service = MarketService(Path(os.getenv("LONDON_DATA_DIR", ".runtime")))
+            app.state.service = MarketService()
         else:
             app.state.service = service
         try:
@@ -70,6 +71,8 @@ def create_app(service: Any | None = None) -> FastAPI:
     def ingest(payload: IngestRequest, request: Request) -> IngestResult:
         try:
             return request.app.state.service.ingest(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
             raise _service_error() from exc
 
@@ -93,6 +96,23 @@ def create_app(service: Any | None = None) -> FastAPI:
             return request.app.state.service.metrics(query)
         except HTTPException:
             raise
+        except Exception as exc:
+            raise _service_error() from exc
+
+    @app.get("/api/status")
+    def status(request: Request):
+        return request.app.state.service.status()
+
+    @app.get("/api/refresh", response_model=RefreshResult | None)
+    def latest_refresh(request: Request):
+        return request.app.state.service.latest_refresh()
+
+    @app.post("/api/refresh", response_model=RefreshResult)
+    def refresh(payload: RefreshRequest, request: Request):
+        try:
+            return request.app.state.service.refresh(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
             raise _service_error() from exc
 

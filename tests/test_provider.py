@@ -69,3 +69,47 @@ def test_openai_provider_configures_timeout_and_zero_retries(monkeypatch):
     client = provider.OpenAIProvider()
     assert kwargs["timeout"] == 20
     assert kwargs["max_retries"] == 0
+
+
+def test_zai_provider_serializes_tool_calls_and_uses_live_defaults(monkeypatch):
+    captured = {}
+    monkeypatch.setenv("ZAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "glm-5.3-flash")
+
+    class Client:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+
+        def create(self, **kwargs):
+            captured["request"] = kwargs
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content="answer",
+                            reasoning_content="private",
+                            tool_calls=[
+                                SimpleNamespace(
+                                    id="call-1",
+                                    function=SimpleNamespace(name="search", arguments='{"q":"x"}'),
+                                )
+                            ],
+                        )
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=3, completion_tokens=2),
+            )
+
+    monkeypatch.setattr(provider, "OpenAI", Client)
+    turn = provider.ZaiProvider().complete(
+        [{"role": "user", "content": "x"}], [{"type": "function"}], 4
+    )
+    assert turn.content == "answer"
+    assert turn.tool_calls[0].model_dump() == {
+        "id": "call-1",
+        "name": "search",
+        "arguments": '{"q":"x"}',
+    }
+    assert captured["request"]["timeout"] == 4
+    assert captured["request"]["model"] == "glm-5.3-flash"

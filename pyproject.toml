@@ -3,7 +3,17 @@ name = "london-monitor"
 version = "0.1.0"
 description = "Evidence-grounded London office market intelligence"
 requires-python = ">=3.12"
-dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "pydantic>=2.10,<3", "langgraph>=0.2,<2", "qdrant-client>=1.12,<2", "openai>=1.60,<3"]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "pydantic>=2.10,<3",
+    "langgraph>=0.2,<2",
+    "qdrant-client>=1.12,<2",
+    "openai>=1.60,<3",
+    "python-dotenv>=1,<2",
+    "fastembed>=0.7,<1",
+    "httpx>=0.28,<1",
+]
 
 [dependency-groups]
 dev = ["pytest>=8,<10", "httpx>=0.28,<1", "ruff>=0.9,<1", "python-pptx>=1,<2"]

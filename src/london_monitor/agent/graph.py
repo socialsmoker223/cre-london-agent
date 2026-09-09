@@ -1,360 +1,407 @@
-import logging
+import json
 import re
 import time
-from calendar import monthrange
-from collections import defaultdict
-from datetime import date
+from datetime import UTC, datetime
+from typing import TypedDict
 from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
+from pydantic import ValidationError
 
-from london_monitor.agent.state import AgentState
+from london_monitor.agent.skills import SKILLS
 from london_monitor.models import (
+    AgentProvider,
     ChatRequest,
     ChatResponse,
     Citation,
     Claim,
-    Draft,
+    Evidence,
+    Metric,
     MetricQuery,
-    Retriever,
+    ResearchAnswer,
+    ScrapeQuery,
     SearchQuery,
-    Store,
-    Synthesizer,
     Trace,
+    WebSearchQuery,
 )
 
-LOG = logging.getLogger(__name__)
-MARKETS = ["City", "West End", "Canary Wharf", "Midtown / Fringe"]
+
+class LiveState(TypedDict, total=False):
+    request: ChatRequest
+    messages: list[dict]
+    trace: Trace
+    evidence: dict[str, Evidence]
+    metrics: list[Metric]
+    rounds: int
+    searches: int
+    scrapes: int
+    deadline: float
+    pending: list
+    answer_text: str
+    warnings: list[str]
+    incomplete: bool
+    response: ChatResponse
 
 
-def build_graph(store: Store, retriever: Retriever, provider: Synthesizer):
-    def node(state: AgentState, name: str) -> None:
-        state["trace"].nodes.append(name)
+TOOL_MODELS = {
+    "query_market_metrics": (MetricQuery, "Query validated numeric observations and comparisons."),
+    "search_market_evidence": (SearchQuery, "Semantic search over ingested full source evidence."),
+    "search_web": (
+        WebSearchQuery,
+        "Discover current market sources; snippets cannot ground answers.",
+    ),
+    "scrape_source": (
+        ScrapeQuery,
+        "Read and index a public page or PDF; returns citeable evidence.",
+    ),
+}
+TOOLS = [
+    {
+        "type": "function",
+        "function": {"name": name, "description": desc, "parameters": model.model_json_schema()},
+    }
+    for name, (model, desc) in TOOL_MODELS.items()
+]
 
-    def understand(state: AgentState) -> dict:
-        request = state["request"]
-        question = request.question
-        if request.previous_question:
-            question = f"{request.previous_question}\nFollow-up: {question}"
-        q = question.lower()
-        supported = bool(
-            re.search(
-                r"\b(office|markets?|rents?|vacancy|take[ -]up|city|west end|canary|midtown|"
-                r"supply|pre[ -]?lets?|interest|bank rate|macro|esg|hybrid|"
-                r"quality|sources|demand)\b",
-                q,
-            )
-        ) and not re.search(
-            r"\b(weather|residential|industrial|logistics|retail|hotels?|bitcoin|paris)\b", q
-        )
-        trace = Trace(
-            run_id=str(uuid4()),
-            intent="London office intelligence" if supported else "unsupported",
-            nodes=["understand_request"],
-        )
-        return {"question": question, "supported": supported, "trace": trace, "warnings": []}
 
-    def route(state: AgentState) -> dict:
-        node(state, "route_skills")
-        q = state["question"].lower()
-        markets = [m for m in MARKETS if m.lower() in q]
-        if "midtown" in q or "fringe" in q:
-            markets = list(dict.fromkeys([*markets, "Midtown / Fringe"]))
-        skills = []
-        if state["supported"]:
-            if any(w in q for w in ("compare", "comparison", "differ")):
-                skills.append("comparison")
-            if any(w in q for w in ("supply", "pipeline", "pre-let", "prelet", "refurb")):
-                skills.append("supply")
-            if any(w in q for w in ("interest", "bank rate", "macro", "hybrid", "esg", "demand")):
-                skills.append("macro")
-            if any(
-                w in q
-                for w in (
-                    "rent",
-                    "vacancy",
-                    "take-up",
-                    "take up",
-                    "changed",
-                    "previous",
-                    "disagree",
-                    "conflict",
-                )
-            ):
-                skills.append("metrics")
-            if not skills and not any(w in q for w in ("quality", "evidence")):
-                skills.append("market_pulse")
-            skills.append("evidence")
-        names = []
-        if re.search(r"\brents?\b", q):
-            names = ["grade_a_rent"] if "grade a" in q else ["prime_rent"]
-        if "vacancy" in q:
-            names.append("vacancy")
-        if "take-up" in q or "take up" in q:
-            names.append("take_up")
-        if "interest" in q or "bank rate" in q:
-            names.append("bank_rate")
-        period_match = re.search(r"(20\d{2})[- ]?q([1-4])", q)
-        period = f"{period_match[1]}-Q{period_match[2]}" if period_match else None
-        as_of = None
-        if period_match:
-            year, month = int(period_match[1]), int(period_match[2]) * 3
-            as_of = date(year, month, monthrange(year, month)[1])
-        historical = any(w in q for w in ("change", "previous", "over time", "histor"))
-        state["trace"].skills = skills
-        return {
-            "skills": skills,
-            "metric_query": MetricQuery(
-                submarkets=list(dict.fromkeys([*markets, "London"]))
-                if markets and "bank_rate" in names
-                else markets,
-                metrics=names,
-                period=period,
-                latest=not historical,
-            ),
-            "search_query": SearchQuery(
-                query=state["question"],
-                submarkets=markets,
-                as_of=as_of,
-                current=any(w in q for w in ("latest", "current")),
-            ),
-        }
+def numbers(text: str) -> set[str]:
+    return {
+        value.replace(",", "").rstrip("0").rstrip(".") if "." in value else value.replace(",", "")
+        for value in re.findall(r"\d[\d,]*(?:\.\d+)?", text)
+    }
 
-    def execute(state: AgentState) -> dict:
-        node(state, "execute_tools")
-        metrics, evidence, facts = [], [], []
-        trace = state["trace"]
-        warnings = state["warnings"]
 
-        def attempt(name, fn, default):
-            trace.tools.append(name)
-            try:
-                return fn()
-            except Exception:
-                LOG.exception("tool_failed run_id=%s tool=%s", trace.run_id, name)
-                trace.failures.append(name)
-                warnings.append(f"{name} unavailable; answer may be incomplete.")
-                return default
-
-        if set(state["skills"]) & {"market_pulse", "comparison", "metrics", "macro"}:
-            metrics = attempt(
-                "query_market_metrics", lambda: store.query_metrics(state["metric_query"]), []
-            )
-        if "evidence" in state["skills"]:
-            evidence = attempt(
-                "search_market_evidence", lambda: retriever.search(state["search_query"]), []
-            )
-        if "supply" in state["skills"]:
-            projects = attempt(
-                "get_supply_pipeline",
-                lambda: store.get_projects(state["metric_query"].submarkets),
-                [],
-            )
-            facts.extend(
-                Claim(
-                    text=(
-                        f"{p.name} ({p.submarket}): {p.status}; expected completion "
-                        f"{p.completion_date}; {p.size_sq_ft:g} sq ft; "
-                        f"{p.prelet_status}."
-                    ),
-                    source_ids=[p.source_id],
-                )
-                for p in projects
-            )
-        trace.retrieval_count = len(evidence)
-        return {"metrics": metrics, "evidence": evidence, "facts": facts, "warnings": warnings}
-
-    def combine(state: AgentState) -> dict:
-        node(state, "combine_evidence")
-        facts = list(state["facts"])
-        groups = defaultdict(list)
-        for m in state["metrics"]:
-            facts.append(
-                Claim(
-                    text=f"{m.submarket} {m.metric.replace('_', ' ')}: "
-                    f"{m.value:g} {m.unit} ({m.period}).",
-                    source_ids=[m.source_id],
-                )
-            )
-            groups[(m.submarket, m.metric, m.period, m.unit)].append(m)
-        for key, rows in groups.items():
-            if len({r.value for r in rows}) > 1:
-                state["warnings"].append(
-                    f"Sources disagree on {key[0]} {key[1]} in {key[2]}; values shown separately."
-                )
-        if not state["metric_query"].latest:
-            series = defaultdict(list)
-            for (market, metric, _period, unit), rows in groups.items():
-                if len({r.value for r in rows}) == 1:
-                    series[(market, metric, unit)].append(rows[0])
-            for (market, metric, unit), rows in series.items():
-                ordered = sorted(rows, key=lambda r: r.period)
-                if len(ordered) >= 2:
-                    old, new = ordered[-2:]
-                    delta_unit = "percentage points" if unit == "%" else unit
-                    facts.append(
-                        Claim(
-                            text=f"{market} {metric.replace('_', ' ')} changed "
-                            f"{new.value - old.value:+g} {delta_unit} from "
-                            f"{old.period} to {new.period}.",
-                            kind="calculation",
-                            source_ids=list(dict.fromkeys([old.source_id, new.source_id])),
-                        )
-                    )
-        if "comparison" in state["skills"]:
-            comparisons = defaultdict(list)
-            for (market, metric, period, unit), rows in groups.items():
-                if len({r.value for r in rows}) == 1 and market != "London":
-                    comparisons[(metric, period, unit)].append(rows[0])
-            for (metric, period, unit), rows in comparisons.items():
-                if len(rows) == 2:
-                    low, high = sorted(rows, key=lambda r: r.value)
-                    delta_unit = "percentage points" if unit == "%" else unit
-                    facts.insert(
-                        0,
-                        Claim(
-                            text=f"{high.submarket} {metric.replace('_', ' ')} is "
-                            f"{high.value - low.value:g} {delta_unit} above {low.submarket} "
-                            f"in {period}.",
-                            kind="calculation",
-                            source_ids=list(dict.fromkeys([low.source_id, high.source_id])),
-                        ),
-                    )
-        # A missing requested period must not be answered with unrelated commentary.
-        missing_period = state["metric_query"].period and not state["metrics"]
-        if not missing_period:
-            for evidence in state["evidence"]:
-                if re.search(r"\d", evidence.excerpt):
-                    state["warnings"].append(
-                        "Numerical commentary was omitted; numbers require structured evidence."
-                    )
-                    continue
-                facts.append(Claim(text=evidence.excerpt, source_ids=[evidence.source_id]))
-            for skill, category, implication in [
-                (
-                    "supply",
-                    "supply",
-                    "Risk to monitor: pipeline timing and pre-let commitments "
-                    "should be assessed together; planned space is not guaranteed availability.",
-                ),
-                (
-                    "macro",
-                    "macro",
-                    "A lower policy rate alone would not demonstrate stronger "
-                    "leasing demand; financing conditions and occupier decisions "
-                    "need separate review.",
-                ),
-            ]:
-                supporting = [
-                    e.source_id
-                    for e in state["evidence"]
-                    if e.category == category and not re.search(r"\d", e.excerpt)
-                ]
-                if skill in state["skills"] and supporting:
-                    facts.append(
-                        Claim(
-                            text=implication,
-                            kind="interpretation",
-                            source_ids=list(dict.fromkeys(supporting)),
-                        )
-                    )
-        else:
-            facts = []
-        if not state["metrics"] and set(state["skills"]) & {"metrics", "comparison"}:
-            state["warnings"].append("Requested structured metrics are unavailable.")
-        return {"facts": facts, "warnings": state["warnings"]}
-
-    def generate(state: AgentState) -> dict:
-        node(state, "generate_answer")
-        try:
-            draft = (
-                provider.synthesize(state["question"], state["facts"])
-                if state["facts"]
-                else Draft()
-            )
-        except Exception:
-            state["trace"].failures.append("synthesis")
-            state["warnings"].append("Model unavailable; showing verified evidence directly.")
-            draft = Draft(claims=state["facts"])
-        return {"draft": draft, "warnings": state["warnings"]}
-
-    def verify(state: AgentState) -> dict:
-        node(state, "verify_grounding")
-        sources = {s.id: s for s in store.list_sources()}
-        allowed = {c.model_dump_json() for c in state["facts"]}
-        claims = state["draft"].claims
-        if (not claims and state["facts"]) or any(
-            c.model_dump_json() not in allowed or any(s not in sources for s in c.source_ids)
-            for c in claims
+def validate_answer(answer: ResearchAnswer, evidence: dict[str, Evidence]) -> list[str]:
+    errors = []
+    for claim in answer.claims:
+        if any(i not in evidence for i in claim.evidence_ids):
+            errors.append("Unknown evidence ID")
+            continue
+        support = " ".join(evidence[i].excerpt for i in claim.evidence_ids)
+        if not numbers(claim.text) <= numbers(support):
+            errors.append("Unsupported numerical claim")
+        if claim.kind == "calculation" and not any(
+            i.startswith("calc:") for i in claim.evidence_ids
         ):
-            state["warnings"].append("Unverified model output rejected; using tool evidence.")
-            claims = state["facts"]
-        claims = [c for c in claims if all(s in sources for s in c.source_ids)]
-        ids = list(dict.fromkeys(s for c in claims for s in c.source_ids))
+            errors.append("Calculation requires deterministic tool evidence")
+    if numbers(answer.conclusion):
+        errors.append("Keep numerical conclusions in cited claims")
+    if not answer.claims and not answer.insufficient_evidence:
+        errors.append("Empty answer must identify insufficient evidence")
+    return list(dict.fromkeys(errors))
+
+
+def build_graph(service, provider: AgentProvider):
+    def agent(state: LiveState):
+        trace = state["trace"]
+        trace.nodes.append("agent")
+        remaining = state["deadline"] - time.monotonic()
+        if remaining <= 0:
+            return {
+                "pending": [],
+                "incomplete": True,
+                "warnings": [*state["warnings"], "Research budget exhausted."],
+            }
+        try:
+            turn = provider.complete(
+                state["messages"],
+                TOOLS if state["rounds"] < 6 else [],
+                timeout=min(remaining, 90),
+            )
+            if state["rounds"] >= 6 and turn.tool_calls:
+                raise ValueError("Tool round budget exhausted")
+            for key, value in turn.usage.items():
+                trace.usage[key] = trace.usage.get(key, 0) + value
+            message = {"role": "assistant", "content": turn.content or None}
+            if turn.reasoning_content:
+                message["reasoning_content"] = turn.reasoning_content
+            if turn.tool_calls:
+                message["tool_calls"] = [
+                    {
+                        "id": t.id,
+                        "type": "function",
+                        "function": {"name": t.name, "arguments": t.arguments},
+                    }
+                    for t in turn.tool_calls
+                ]
+            return {
+                "messages": [*state["messages"], message],
+                "pending": turn.tool_calls,
+                "answer_text": turn.content,
+            }
+        except Exception as exc:
+            trace.failures.append(f"model:{type(exc).__name__}")
+            return {
+                "pending": [],
+                "incomplete": True,
+                "warnings": [*state["warnings"], "Model request failed; evidence-only fallback."],
+            }
+
+    def tools(state: LiveState):
+        state["trace"].nodes.append("tools")
+        messages = list(state["messages"])
+        for call in state["pending"]:
+            state["trace"].tools.append(call.name)
+            remaining = state["deadline"] - time.monotonic()
+            try:
+                if remaining <= 0:
+                    raise TimeoutError("Research deadline reached")
+                if call.name not in TOOL_MODELS:
+                    raise ValueError("Unknown tool")
+                args = TOOL_MODELS[call.name][0].model_validate_json(call.arguments)
+                if call.name == "search_web":
+                    if state["searches"] >= 3:
+                        raise ValueError("Web search budget exhausted")
+                    state["searches"] += 1
+                    result = {
+                        "leads_only": True,
+                        "results": [
+                            h.model_dump(mode="json")
+                            for h in service.web.search(args, timeout=min(30, remaining))
+                        ],
+                    }
+                elif call.name == "scrape_source":
+                    if state["scrapes"] >= 6:
+                        raise ValueError("Page scrape budget exhausted")
+                    state["scrapes"] += 1
+                    result, chunks = service.collect(args, deadline=state["deadline"])
+                    state["evidence"].update({e.id: e for e in chunks})
+                    if result.get("warning"):
+                        state["warnings"].append(result["warning"])
+                        state["trace"].failures.append("extract_metrics:unavailable")
+                        state["incomplete"] = True
+                    for key, value in result.get("usage", {}).items():
+                        state["trace"].usage[key] = state["trace"].usage.get(key, 0) + value
+                elif call.name == "search_market_evidence":
+                    chunks = service.retriever.search(args)
+                    chunks = [e for e in chunks if service.is_live_source(e.source_id)]
+                    if args.current and not args.as_of:
+                        current_ids = service.current_source_ids()
+                        chunks = [e for e in chunks if e.source_id in current_ids]
+                    state["evidence"].update({e.id: e for e in chunks})
+                    result = {"evidence": [e.model_dump(mode="json") for e in chunks]}
+                else:
+                    rows, chunks = service.metric_evidence(args)
+                    state["metrics"] = list(
+                        {m.model_dump_json(): m for m in [*state["metrics"], *rows]}.values()
+                    )
+                    state["evidence"].update({e.id: e for e in chunks})
+                    result = {
+                        "metrics": [m.model_dump(mode="json") for m in rows],
+                        "evidence": [e.model_dump(mode="json") for e in chunks],
+                    }
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": json.dumps(result, ensure_ascii=False),
+                    }
+                )
+            except Exception as exc:
+                state["trace"].failures.append(f"{call.name}:{type(exc).__name__}")
+                state["warnings"].append(f"{call.name}: {str(exc)[:180]}")
+                state["incomplete"] = True
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": json.dumps({"error": str(exc)[:180]}),
+                    }
+                )
+        state["trace"].retrieval_count = len(state["evidence"])
+        return {**state, "messages": messages, "pending": [], "rounds": state["rounds"] + 1}
+
+    def verify(state: LiveState):
+        state["trace"].nodes.append("verify")
+        evidence = state["evidence"]
+        answer = None
+        for attempt in range(2):
+            try:
+                candidate = ResearchAnswer.model_validate_json(state.get("answer_text", ""))
+                errors = validate_answer(candidate, evidence)
+                if errors:
+                    raise ValueError("; ".join(errors))
+                answer = candidate
+                break
+            except (ValidationError, ValueError):
+                remaining = state["deadline"] - time.monotonic()
+                if attempt or remaining <= 0 or not state.get("answer_text"):
+                    break
+                try:
+                    turn = provider.complete(
+                        [
+                            *state["messages"],
+                            {
+                                "role": "user",
+                                "content": "Repair JSON: use supported evidence IDs and numbers. "
+                                "Calculations need tool evidence. Return ResearchAnswer JSON only.",
+                            },
+                        ],
+                        [],
+                        timeout=min(remaining, 45),
+                    )
+                    state["answer_text"] = turn.content
+                    for key, value in turn.usage.items():
+                        state["trace"].usage[key] = state["trace"].usage.get(key, 0) + value
+                except Exception:
+                    break
+        sources = {s.id: s for s in service.sources() if not s.demo}
+        evidence = {
+            i: e
+            for i, e in evidence.items()
+            if all(s in sources for s in (e.source_ids or [e.source_id]))
+        }
+        if answer is not None and any(
+            i not in evidence for c in answer.claims for i in c.evidence_ids
+        ):
+            answer = None
+        if answer is None:
+            state["incomplete"] = True
+            state["warnings"].append("Answer verification failed; showing source excerpts only.")
+            from london_monitor.models import AnswerClaim
+
+            answer = ResearchAnswer(
+                conclusion="Evidence-only fallback",
+                claims=[
+                    AnswerClaim(text=e.excerpt[:1800], evidence_ids=[i])
+                    for i, e in list(evidence.items())[:8]
+                ],
+                insufficient_evidence=not evidence,
+            )
+        if (
+            re.search(r"\b(latest|current|today|now)\b", state["request"].question, re.I)
+            and not state["searches"]
+        ):
+            state["incomplete"] = True
+            state["warnings"].append("No live search completed; this answer uses stored evidence.")
+        used = list(dict.fromkeys(i for c in answer.claims for i in c.evidence_ids))
+        source_ids = list(
+            dict.fromkeys(
+                s for i in used for s in (evidence[i].source_ids or [evidence[i].source_id])
+            )
+        )
+        state["trace"].source_count = len(source_ids)
         citations = [
             Citation(
-                number=i + 1,
+                number=n + 1,
                 source=sources[s],
-                excerpt=next(c.text for c in claims if s in c.source_ids),
+                excerpt=next(
+                    evidence[i].excerpt
+                    for i in used
+                    if s in (evidence[i].source_ids or [evidence[i].source_id])
+                ),
             )
-            for i, s in enumerate(ids)
+            for n, s in enumerate(source_ids)
         ]
-        demo = any(c.source.demo for c in citations)
-        prefix = "DEMO DATA — synthetic assessment dataset.\n\n" if demo else ""
-        if claims:
-            periods = sorted({m.period for m in state["metrics"]})
-            prefix += (
-                f"Evidence snapshot{': ' + ', '.join(periods) if periods else ''}. "
-                "This reflects stored evidence, not a live market feed.\n\n"
+        claims = [
+            Claim(
+                text=c.text,
+                kind=c.kind,
+                source_ids=list(
+                    dict.fromkeys(
+                        s
+                        for i in c.evidence_ids
+                        for s in (evidence[i].source_ids or [evidence[i].source_id])
+                    )
+                ),
             )
-            labels = {"calculation": "Calculated: ", "interpretation": "Interpretation: "}
-            answer = prefix + "\n".join(
-                f"• {labels.get(c.kind, '')}"
-                f"{c.text} " + " ".join(f"[{ids.index(s) + 1}]" for s in c.source_ids)
+            for c in answer.claims
+        ]
+        body = (
+            answer.conclusion
+            + "\n\n"
+            + "\n\n".join(
+                f"{'Interpretation: ' if c.kind == 'interpretation' else ''}{c.text} "
+                + " ".join(f"[{source_ids.index(s) + 1}]" for s in c.source_ids)
                 for c in claims
             )
-        else:
-            answer = "Insufficient evidence to answer this question from the London office dataset."
-        if citations:
-            newest = max(c.source.published_at for c in citations)
-            if (date.today() - newest).days > 90:
-                state["warnings"].append(
-                    f"Stored evidence is stale: newest cited publication is {newest}."
-                )
-        state["trace"].usage = state["draft"].usage
+        )
+        if not claims:
+            body = "Insufficient evidence to answer. " + answer.conclusion
+        if any(not c.source.trusted for c in citations):
+            state["warnings"].append(
+                "Some evidence is outside the preferred broker, official and developer sources; "
+                "treat its authority as unconfirmed."
+            )
+        dates = [c.source.published_at for c in citations if c.source.published_at]
+        freshness = (
+            f"Latest cited publication: {max(dates)}" if dates else "Publication dates unknown"
+        )
+        if any(c.source.published_at is None for c in citations):
+            state["warnings"].append("Some sources have no confirmed publication date.")
         response = ChatResponse(
-            answer=answer,
+            answer=body.strip(),
             claims=claims,
             citations=citations,
             metrics=state["metrics"],
             warnings=list(dict.fromkeys(state["warnings"])),
             trace=state["trace"],
-            demo=demo,
+            demo=False,
+            mode="live",
+            incomplete=state["incomplete"],
             insufficient_evidence=not claims,
+            evidence=[evidence[i] for i in used],
+            conversation_id=state["request"].conversation_id,
+            freshness=freshness,
         )
         return {"response": response}
 
-    graph = StateGraph(AgentState)
-    nodes = {
-        "understand_request": understand,
-        "route_skills": route,
-        "execute_tools": execute,
-        "combine_evidence": combine,
-        "generate_answer": generate,
-        "verify_grounding": verify,
-    }
-    previous = START
-    for name, function in nodes.items():
-        graph.add_node(name, function)
-        graph.add_edge(previous, name)
-        previous = name
-    graph.add_edge(previous, END)
+    graph = StateGraph(LiveState)
+    graph.add_node("agent", agent)
+    graph.add_node("tools", tools)
+    graph.add_node("verify", verify)
+    graph.add_edge(START, "agent")
+    graph.add_conditional_edges("agent", lambda s: "tools" if s.get("pending") else "verify")
+    graph.add_edge("tools", "agent")
+    graph.add_edge("verify", END)
     return graph.compile()
 
 
-def run_graph(graph, request: ChatRequest) -> ChatResponse:
-    start = time.perf_counter()
-    response = graph.invoke({"request": request})["response"]
-    response.trace.duration_ms = round((time.perf_counter() - start) * 1000, 2)
-    LOG.info("agent_run %s", response.trace.model_dump_json())
+def run_graph(
+    graph,
+    request: ChatRequest,
+    history: list[dict] | None = None,
+    known_evidence: dict | None = None,
+    transcript: list | None = None,
+    saved_evidence: dict | None = None,
+) -> ChatResponse:
+    start = time.monotonic()
+    question = request.question
+    if request.previous_question:
+        question = f"Previous question: {request.previous_question}\nFollow-up: {question}"
+    state = graph.invoke(
+        {
+            "request": request,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": SKILLS + f"\nToday's date: {datetime.now(UTC).date()}",
+                },
+                *(history or []),
+                {"role": "user", "content": question},
+            ],
+            "trace": Trace(
+                run_id=str(uuid4()),
+                intent="Live London office research",
+                skills=["market_pulse", "comparison", "supply", "macro"],
+            ),
+            "evidence": dict(known_evidence or {}),
+            "metrics": [],
+            "rounds": 0,
+            "searches": 0,
+            "scrapes": 0,
+            "deadline": start + 180,
+            "pending": [],
+            "answer_text": "",
+            "warnings": [],
+            "incomplete": False,
+        },
+        config={"recursion_limit": 20},
+    )
+    if transcript is not None:
+        transcript.extend(state["messages"][1 + len(history or []) :])
+    if saved_evidence is not None:
+        saved_evidence.update(dict(list(state["evidence"].items())[-100:]))
+    response = state["response"]
+    response.trace.duration_ms = round((time.monotonic() - start) * 1000, 1)
     return response

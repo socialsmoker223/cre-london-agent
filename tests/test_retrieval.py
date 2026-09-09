@@ -1,26 +1,13 @@
 from datetime import date
 
+from london_monitor.db import Database
 from london_monitor.ingestion import ingest
 from london_monitor.models import IngestRequest, SearchQuery, Source
-from london_monitor.retrieval import VectorIndex
-
-
-class FakeStore:
-    def __init__(self):
-        self.sources = []
-
-    def list_sources(self):
-        return self.sources
-
-    def add_source(self, source):
-        if any(item.checksum == source.checksum for item in self.sources):
-            return False
-        self.sources.append(source)
-        return True
+from london_monitor.retrieval import DemoVectorIndex, VectorIndex
 
 
 def test_retrieval_filters_and_provenance(tmp_path):
-    index = VectorIndex(tmp_path / "qdrant")
+    index = DemoVectorIndex(tmp_path / "qdrant")
     index.index(
         Source(id="city", title="City", publisher="p", published_at=date(2024, 1, 1), checksum="1"),
         "City offices see stronger leasing demand from financial firms.",
@@ -55,6 +42,36 @@ def test_retrieval_filters_and_provenance(tmp_path):
     index.close()
 
 
+def test_as_of_excludes_undated_sources(tmp_path):
+    index = DemoVectorIndex(tmp_path / "qdrant")
+    index.index(
+        Source(id="undated", title="Undated", publisher="p", checksum="u"),
+        "Sustainable offices reduce energy consumption.", "London", "market"
+    )
+    assert index.search(SearchQuery(query="sustainable offices", as_of=date(2025, 1, 1))) == []
+    index.close()
+
+
+def test_current_search_excludes_superseded_url_version(tmp_path):
+    class Embedder:
+        dimension = 2
+        name = "test"
+
+        def embed(self, texts):
+            return [[1.0, 0.0] for _ in texts]
+
+    index = VectorIndex(tmp_path / "qdrant", embedder=Embedder())
+    for source_id in ("old", "new"):
+        index.index(
+            Source(id=source_id, title=source_id, publisher="p", published_at=date(2026, 1, 1),
+                   checksum=source_id, canonical_url="https://example.test/report"),
+            f"{source_id} sustainable workplace report.", "London", "market"
+        )
+    results = index.search(SearchQuery(query="sustainable workplace", current=True, limit=10))
+    assert {item.source_id for item in results} == {"new"}
+    index.close()
+
+
 def test_ingestion_is_duplicate_safe_and_retries_after_index_failure(tmp_path):
     class FailingOnce:
         def __init__(self):
@@ -72,16 +89,18 @@ def test_ingestion_is_duplicate_safe_and_retries_after_index_failure(tmp_path):
         text="  Office   demand\n remains resilient.  ",
         published_at=date(2025, 1, 1),
     )
-    store = FakeStore()
+    store = Database(tmp_path / "market.sqlite")
     retriever = FailingOnce()
     try:
         ingest(request, store, retriever)
     except RuntimeError:
         pass
-    assert store.sources == []
+    assert store.list_sources() == []
     first = ingest(request, store, retriever)
     second = ingest(request, store, retriever)
     assert first.duplicate is False
     assert second.duplicate is True
     assert first.source.id == second.source.id
     assert first.source.checksum == second.source.checksum
+    assert store.get_document(first.source.id).text
+    store.close()

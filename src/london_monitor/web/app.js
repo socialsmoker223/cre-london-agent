@@ -5,6 +5,7 @@ const answer = $('#answer');
 const status = $('#status');
 const context = $('#use-context');
 let previousQuestion = null;
+let conversationId = null;
 
 document.querySelectorAll('.examples button').forEach((button) => button.addEventListener('click', () => {
   question.value = button.textContent;
@@ -31,6 +32,8 @@ function renderAnswer(data) {
   text(answer, data.demo ? 'DEMO DATA · ANSWER' : 'MARKET ANSWER', 'div').className = 'answer-meta';
   text(answer, 'Grounded market answer', 'h2');
   text(answer, data.answer, 'p').className = 'answer-body';
+  if (data.incomplete) text(answer, 'This answer is incomplete; refresh or try again.', 'p');
+  if (data.freshness) text(answer, `Freshness · ${data.freshness}`, 'p').className = 'answer-meta';
   (data.warnings || []).forEach((warning) => text(answer, warning, 'p'));
   const citations = document.createElement('div');
   citations.className = 'citations';
@@ -38,7 +41,7 @@ function renderAnswer(data) {
     const item = document.createElement('details');
     item.className = 'citation';
     const summary = document.createElement('summary');
-    text(summary, `${citation.number}. ${citation.source.title} · ${citation.source.publisher} · ${citation.source.published_at}`);
+    text(summary, `${citation.number}. ${citation.source.title} · ${citation.source.publisher} · ${citation.source.published_at || "date unknown"}`);
     item.append(summary);
     text(item, citation.excerpt, 'p');
     if (citation.source.url) {
@@ -56,7 +59,16 @@ function renderAnswer(data) {
     const trace = document.createElement('div');
     trace.className = 'trace';
     text(trace, `Trace · ${[...(data.trace.skills || []), ...(data.trace.tools || [])].join(' · ')}`);
+    text(trace, ` · ${data.trace.source_count || data.citations.length} sources · ${(data.trace.duration_ms / 1000).toFixed(1)}s · ${data.trace.failures.length} failures`);
+    if (Object.keys(data.trace.usage || {}).length) text(trace, ` · tokens ${JSON.stringify(data.trace.usage)}`);
     answer.append(trace);
+  }
+  if (data.evidence?.length) {
+    const evidence = document.createElement('div');
+    evidence.className = 'citations';
+    text(evidence, 'Evidence', 'h3');
+    data.evidence.forEach((item) => text(evidence, `${item.id} · ${item.excerpt}`, 'p'));
+    answer.append(evidence);
   }
   status.textContent = 'Answer ready.';
 }
@@ -70,16 +82,19 @@ form.addEventListener('submit', async (event) => {
   }
   const ask = $('#ask');
   ask.disabled = true;
-  status.textContent = 'Finding grounded evidence…';
+  status.textContent = 'Researching sources and checking evidence (up to three minutes)…';
   try {
     const payload = { question: value };
     if (context.checked && previousQuestion) payload.previous_question = previousQuestion;
+    if (context.checked && conversationId) payload.conversation_id = conversationId;
     const response = await fetch('/api/chat', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
     });
     if (!response.ok) throw new Error('Request failed');
-    renderAnswer(await response.json());
+    const result = await response.json();
+    renderAnswer(result);
     previousQuestion = value;
+    if (result?.conversation_id) conversationId = result.conversation_id;
   } catch {
     status.textContent = 'The monitor is temporarily unavailable. Please try again.';
   } finally {
@@ -95,7 +110,7 @@ async function loadMetrics() {
     const sources = Object.fromEntries((await sourcesResponse.json()).map((source) => [source.id, source]));
     const groups = {};
     metrics.forEach((metric) => {
-      const key = `${metric.metric}|${metric.submarket}|${metric.period}`;
+      const key = `${metric.metric}|${metric.submarket}|${metric.period}|${metric.unit}|${metric.definition}`;
       (groups[key] ||= []).push(metric);
     });
     const table = document.createElement('table');
@@ -105,14 +120,14 @@ async function loadMetrics() {
     Object.values(groups).flat().forEach((metric) => {
       const row = document.createElement('tr');
       const source = sources[metric.source_id];
-      const values = groups[`${metric.metric}|${metric.submarket}|${metric.period}`];
+      const values = groups[`${metric.metric}|${metric.submarket}|${metric.period}|${metric.unit}|${metric.definition}`];
       cell(row, metric.metric.replaceAll('_', ' '), 'th');
       cell(row, metric.submarket);
       cell(row, `${metric.value} ${metric.unit}`);
       cell(row, metric.period);
       const sourceCell = cell(row, '');
       text(sourceCell, source ? `${source.demo ? 'Demo · ' : ''}${source.publisher}` : metric.source_id);
-      if (values.length > 1) text(sourceCell, 'Conflicting estimate', 'small').className = 'conflict';
+      if (new Set(values.map(item => item.value)).size > 1) text(sourceCell, 'Conflicting estimate', 'small').className = 'conflict';
       row.append(sourceCell);
       body.append(row);
     });
@@ -125,4 +140,55 @@ async function loadMetrics() {
     text($('#metrics'), 'Metrics are unavailable right now.');
   }
 }
+
+async function loadStatus() {
+  try {
+    const response = await fetch('/api/status');
+    if (!response.ok) throw new Error();
+    const data = await response.json();
+    const live = data.mode === 'live' || data.live === true;
+    $('#mode-badge').textContent = live ? 'LIVE MODE' : 'DEMO DATA';
+    $('#mode-badge').classList.toggle('live-pill', live);
+    $('#refresh').disabled = !live;
+  } catch {
+    $('#mode-badge').textContent = 'STATUS UNAVAILABLE';
+  }
+}
+
+async function loadBriefing() {
+  try {
+    const response = await fetch('/api/refresh');
+    if (!response.ok) throw new Error();
+    const data = await response.json();
+    const briefing = $('#briefing');
+    briefing.replaceChildren();
+    if (data) {
+      briefing.classList.remove('hidden');
+      text(briefing, `Last refresh · ${data.status} · ${new Date(data.completed_at).toLocaleString()}`, 'h3');
+      text(briefing, data.briefing || 'No briefing available.', 'p');
+    }
+  } catch { /* briefing is optional */ }
+}
+
+$('#refresh').addEventListener('click', async () => {
+  const button = $('#refresh');
+  const refreshStatus = $('#refresh-status');
+  button.disabled = true;
+  refreshStatus.textContent = 'Refreshing evidence (up to five minutes)…';
+  try {
+    const response = await fetch('/api/refresh', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}',
+    });
+    if (!response.ok) throw new Error();
+    const data = await response.json();
+    refreshStatus.textContent = `Refresh ${data.status}.`;
+    await Promise.all([loadBriefing(), loadMetrics()]);
+  } catch {
+    refreshStatus.textContent = 'Refresh failed. Please try again.';
+  } finally {
+    button.disabled = false;
+  }
+});
 loadMetrics();
+loadStatus();
+loadBriefing();

@@ -1,13 +1,10 @@
-import tempfile
+import json
 from pathlib import Path
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
-
-from london_monitor.models import MetricQuery
-from london_monitor.service import MarketService
 
 OUT = Path("deliverables/london-office-market-agent.pptx")
 NAVY = RGBColor(16, 35, 49)
@@ -48,7 +45,7 @@ def base(prs, number, section, title, dark=False):
         0.4,
         8,
         0.25,
-        f"LONDON MARKET MONITOR  /  {section.upper()}  ·  DEMO DATA",
+        f"LONDON MARKET MONITOR  /  {section.upper()}  ·  LIVE RESEARCH",
         9,
         TEAL if not dark else RGBColor(164, 212, 205),
         True,
@@ -82,141 +79,166 @@ def build():
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
-    with tempfile.TemporaryDirectory() as temp_dir:
-        service = MarketService(Path(temp_dir))
-        metric = service.metrics(
-            MetricQuery(submarkets=["City"], metrics=["prime_rent"], latest=True)
-        )[0]
-        service.close()
-    metric_label = f"{metric.value:g} {metric.unit} ({metric.period})"
-    s = base(prs, 1, "the brief", "London office decisions need a trusted starting point")
-    box(s, 0.7, 2.25, 6.5, 1.4, "The question is rarely\njust a number.", 32, NAVY, True, "Georgia")
+    example_path = Path("deliverables/live-run.json")
+    example = json.loads(example_path.read_text()) if example_path.exists() else None
+    s = base(prs, 1, "the decision", "What changed — and what does it mean for a lease?")
     box(
         s,
-        0.72,
-        4.1,
-        5.8,
-        1,
-        "Teams need a current view of rents, vacancy, supply and macro context — "
-        "with the evidence trail attached.",
-        17,
+        0.8,
+        2.25,
+        6.2,
+        1.5,
+        "Discover reports.\nCompare the evidence.",
+        32,
+        NAVY,
+        True,
+        "Georgia",
+    )
+    box(
+        s,
+        0.82,
+        4.3,
+        6.0,
+        1.3,
+        "Bring rents, demand, supply and macro context into one research conversation, "
+        "with the source trail attached.",
+        18,
         MUTED,
     )
     card(
         s,
-        8,
+        8.0,
         2.2,
-        4.55,
-        3.2,
-        "Product",
-        "A local-first monitor that turns a plain-language question into a concise answer, "
-        "metrics, citations and a run trace.",
+        4.5,
+        3.5,
+        "Business question",
+        "Where is occupier demand strengthening, and could constrained quality supply "
+        "change the timing or terms of our next leasing decision?",
     )
-    s = base(prs, 2, "the product", "One path from question to grounded answer", True)
-    for x, h, b in [
-        (0.8, "ASK", "Plain-language question"),
-        (3.35, "ROUTE", "Skills + typed queries"),
-        (5.9, "EVIDENCE", "SQLite + lexical retrieval"),
-        (8.45, "VERIFY", "Source IDs + citations"),
-        (11, "ANSWER", "UI, API or CLI"),
+    s = base(prs, 2, "workflow", "One bounded research loop", True)
+    for x, heading, body in [
+        (0.8, "DISCOVER", "Find broker, official and developer reports"),
+        (3.35, "READ", "Extract public pages and text PDFs"),
+        (5.9, "COMPARE", "Retrieve passages; align definitions and periods"),
+        (8.45, "EXPLAIN", "Separate reported facts from implications"),
+        (11.0, "CHECK", "Open citations and inspect missing evidence"),
     ]:
-        card(s, x, 2.25, 2.0, 2.5, h, b, RGBColor(164, 212, 205), True)
+        card(s, x, 2.3, 2.0, 3.0, heading, body, RGBColor(164, 212, 205), True)
     box(
         s,
         0.85,
-        5.5,
+        5.85,
         11.5,
         0.65,
-        "Question  →  intent and skill routing  →  market data + evidence  →  "
-        "grounded answer with citations",
+        "z.ai chooses tools • Firecrawl reads sources • FastEmbed + Qdrant retrieves • "
+        "SQLite preserves observations",
         13,
         RGBColor(174, 200, 198),
     )
-    s = base(prs, 3, "example workflow", "“What is happening to prime rents in the City?”")
-    card(
-        s,
-        0.8,
-        2.1,
-        3.6,
-        3.55,
-        "1  retrieve",
-        "Metric query\nCity · prime_rent\nLatest stored period\n\nEvidence search\nCity + current",
-        dark=False,
-    )
-    card(
-        s,
-        4.85,
-        2.1,
-        3.6,
-        3.55,
-        "2  combine",
-        f"City prime rent: {metric_label}\n\nEvidence snapshot: stored demo data, not a live feed.",
-        dark=False,
-        accent=TEAL,
-    )
-    card(
-        s,
-        8.9,
-        2.1,
-        3.6,
-        3.55,
-        "3  return",
-        "Answer with [1] citations\nPublisher + date + URL\n\nTrace: metrics · evidence · verify",
-        dark=False,
-        accent=TEAL,
-    )
-    s = base(prs, 4, "trust", "Reliability is part of the answer", True)
-    for i, (h, b) in enumerate(
+    s = base(prs, 3, "live check", "A recorded run, with its limits visible")
+    if example:
+        response = example["response"]
+        claims = response.get("claims", [])
+        chosen = claims[:1] + [c for c in claims if c["kind"] == "interpretation"][:1]
+        summary = "\n\n".join(c["text"] for c in chosen)[:680]
+        card(s, 0.8, 2.1, 7.0, 3.9, "Actual model answer", summary or response["answer"][:530])
+        card(
+            s,
+            8.2,
+            2.1,
+            4.3,
+            3.9,
+            "Evidence trail",
+            f"{len(response['citations'])} cited source(s) · incomplete\n"
+            + "\n".join(dict.fromkeys(response["trace"]["tools"]))
+            + "\n\nDirectly ingested public report. Local vector check. "
+            "Firecrawl was not used in this run.",
+        )
+    else:
+        card(
+            s,
+            0.8,
+            2.1,
+            5.6,
+            3.8,
+            "Verified independently",
+            "Configured z.ai completed a two-step tool conversation.\n\n"
+            "Real semantic embeddings retrieved a paraphrase and survived reopening.",
+        )
+        card(
+            s,
+            6.8,
+            2.1,
+            5.6,
+            3.8,
+            "Live example blocked",
+            "Host disk exhaustion caused Docker storage errors.\n\n"
+            "No end-to-end live report answer is presented as completed.",
+        )
+    if example:
+        box(s, 0.85, 6.45, 11.6, 0.5, "Source: " + example["source"]["url"], 10, MUTED)
+    s = base(prs, 4, "change briefing", "Separate a changed market from a changed source", True)
+    for i, (heading, body) in enumerate(
         [
-            ("Typed", "Pydantic contracts at every boundary"),
-            ("Bounded", "Parameterized, limited queries"),
-            ("Grounded", "Unknown claims are rejected"),
-            ("Transparent", "Warnings, trace and demo label"),
+            (
+                "New report",
+                "Discoveries establish coverage; they do not alone prove market movement.",
+            ),
+            (
+                "Revised content",
+                "Same URL, different checksum: retain both versions and source IDs.",
+            ),
+            (
+                "Comparable change",
+                "Match units, periods and definitions; calculate differences in code.",
+            ),
+            (
+                "Business implication",
+                "Qualify timing and supply risks; expose disagreement and collection gaps.",
+            ),
         ]
     ):
         card(
             s,
             0.8 + (i % 2) * 6.05,
-            2.15 + (i // 2) * 1.85,
+            2.15 + (i // 2) * 1.95,
             5.35,
-            1.55,
-            h,
-            b,
+            1.8,
+            heading,
+            body,
             RGBColor(164, 212, 205),
             True,
         )
-    s = base(prs, 5, "next", "A focused PoC with a clear production path")
+    s = base(prs, 5, "readiness", "Implemented; full live readiness still needs verification")
     card(
         s,
         0.8,
         2.1,
         3.65,
-        3.5,
-        "Today · PoC",
-        "Offline by default\nSynthetic seed data\nHashed lexical vectors\nOne local worker\n"
-        "Text ingestion",
-        accent=TEAL,
+        3.8,
+        "Delivered",
+        "Tool-driven chat\nSemantic evidence\nManual refresh + briefing\n"
+        "Source versions + citations\nExplicit demo isolation",
     )
     card(
         s,
         4.85,
         2.1,
         3.65,
-        3.5,
-        "Next · harden",
-        "Curated connectors\nFreshness SLAs\nStronger embeddings\nServer storage\nAccess control",
-        accent=TEAL,
+        3.8,
+        "Verified",
+        "Automated grounding tests\nDeterministic evaluation\n"
+        "Real model tool calls\nReal semantic retrieval\nCompose configuration",
     )
     card(
         s,
         8.9,
         2.1,
         3.65,
-        3.5,
-        "Measure · prove",
-        "Citation coverage\nRetrieval relevance\nLatency by route\nProvider fallback\n"
-        "User feedback",
-        accent=TEAL,
+        3.8,
+        "Remaining blocker",
+        "Free host disk capacity and restore Docker health.\n\n"
+        "Then verify Firecrawl search + scrape, full Compose startup and persistence.",
     )
     OUT.parent.mkdir(exist_ok=True)
     prs.save(OUT)

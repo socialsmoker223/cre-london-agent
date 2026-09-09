@@ -8,17 +8,23 @@ from london_monitor.models import ChatRequest
 
 
 def main():
+    from london_monitor.config import Settings
+
+    settings = Settings.from_env()
     parser = argparse.ArgumentParser(description="London office market intelligence")
-    parser.add_argument("command", choices=["init-demo", "ask", "serve", "eval", "smoke"])
+    parser.add_argument(
+        "command", choices=["init-demo", "ask", "serve", "eval", "smoke", "refresh"]
+    )
     parser.add_argument(
         "question", nargs="?", default="Give me the latest London office market pulse."
     )
-    parser.add_argument(
-        "--data-dir", type=Path, default=Path(os.getenv("LONDON_DATA_DIR", ".runtime"))
-    )
+    parser.add_argument("--data-dir", type=Path, default=settings.data_dir)
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--mode", choices=["live", "demo"])
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
+    if args.mode:
+        os.environ["LONDON_MODE"] = args.mode
     if args.command == "serve":
         import uvicorn
 
@@ -27,10 +33,16 @@ def main():
         return
     from london_monitor.service import MarketService
 
-    service = MarketService(args.data_dir)
+    service = MarketService(
+        args.data_dir, mode="demo" if args.command in {"init-demo", "eval", "smoke"} else args.mode
+    )
     try:
         if args.command == "init-demo":
             print(f"DEMO DATA initialized: {len(service.sources())} sources")
+        elif args.command == "refresh":
+            from london_monitor.models import RefreshRequest
+
+            print(service.refresh(RefreshRequest()).model_dump_json(indent=2))
         elif args.command == "eval":
             from london_monitor.evaluation import evaluate
 

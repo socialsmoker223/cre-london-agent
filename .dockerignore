@@ -6,6 +6,7 @@ __pycache__
 .pytest_cache
 .ruff_cache
 deliverables
+.runtime/firecrawl
 
 .DS_Store
 **/__pycache__

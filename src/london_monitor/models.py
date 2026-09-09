@@ -17,11 +17,15 @@ class Source(Model):
     title: str
     publisher: str
     url: HttpUrl | None = None
-    published_at: date
+    published_at: date | None = None
     retrieved_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     source_type: str = "text"
     checksum: str
     demo: bool = True
+    submarket: Submarket = "London"
+    category: str = "commentary"
+    trusted: bool = False
+    canonical_url: str | None = None
 
 
 class Metric(Model):
@@ -31,6 +35,8 @@ class Metric(Model):
     period: str = Field(pattern=r"^\d{4}-Q[1-4]$")
     submarket: Submarket
     source_id: str
+    definition: str = ""
+    quotation: str = ""
 
 
 class Project(Model):
@@ -49,8 +55,10 @@ class Evidence(Model):
     excerpt: str
     category: str
     submarket: Submarket
-    published_at: date
+    published_at: date | None = None
+    source_ids: list[str] = Field(default_factory=list)
     score: float = 0
+    location: str = ""
 
 
 class MetricQuery(Model):
@@ -74,11 +82,13 @@ class IngestRequest(Model):
     title: str = Field(min_length=1, max_length=200)
     publisher: str = Field(min_length=1, max_length=200)
     text: str = Field(min_length=20, max_length=100000)
-    published_at: date
+    published_at: date | None = None
     url: HttpUrl | None = None
     submarket: Submarket = "London"
     category: str = Field(default="commentary", max_length=80)
     demo: bool = False
+    trusted: bool = False
+    source_type: str = "text"
 
 
 class IngestResult(Model):
@@ -90,6 +100,7 @@ class IngestResult(Model):
 class ChatRequest(Model):
     question: str = Field(min_length=3, max_length=2000)
     previous_question: str | None = Field(default=None, max_length=2000)
+    conversation_id: str | None = Field(default=None, max_length=64)
 
 
 class Citation(Model):
@@ -116,6 +127,7 @@ class Trace(Model):
     tools: list[str] = Field(default_factory=list)
     nodes: list[str] = Field(default_factory=list)
     retrieval_count: int = 0
+    source_count: int = 0
     duration_ms: float = 0
     failures: list[str] = Field(default_factory=list)
     usage: dict[str, int] = Field(default_factory=dict)
@@ -130,6 +142,11 @@ class ChatResponse(Model):
     trace: Trace
     demo: bool
     insufficient_evidence: bool = False
+    mode: Literal["live", "demo"] = "demo"
+    incomplete: bool = False
+    conversation_id: str | None = None
+    evidence: list[Evidence] = Field(default_factory=list)
+    freshness: str = ""
 
 
 class Store(Protocol):
@@ -137,6 +154,12 @@ class Store(Protocol):
     def list_sources(self) -> list[Source]: ...
     def add_metrics(self, metrics: list[Metric]) -> None: ...
     def query_metrics(self, query: MetricQuery) -> list[Metric]: ...
+    def save_document(self, source: Source, text: str) -> bool: ...
+    def get_document(self, source_id: str) -> "Document | None": ...
+    def list_documents(self) -> list["Document"]: ...
+    def save_refresh(self, result: "RefreshResult") -> None: ...
+    def latest_refresh(self) -> "RefreshResult | None": ...
+    def latest_successful_refresh(self) -> "RefreshResult | None": ...
     def add_projects(self, projects: list[Project]) -> None: ...
     def get_projects(self, submarkets: list[Submarket]) -> list[Project]: ...
 
@@ -149,3 +172,96 @@ class Retriever(Protocol):
 
 class Synthesizer(Protocol):
     def synthesize(self, question: str, facts: list[Claim]) -> Draft: ...
+
+
+class Document(Model):
+    source: Source
+    text: str
+
+
+class WebSearchQuery(Model):
+    query: str = Field(min_length=3, max_length=500)
+    trusted_first: bool = True
+    limit: int = Field(default=5, ge=1, le=5)
+
+
+class WebHit(Model):
+    url: HttpUrl
+    title: str
+    description: str = ""
+    trusted: bool = False
+
+
+class ScrapeQuery(Model):
+    url: HttpUrl
+    submarket: Submarket = "London"
+    category: str = Field(default="commentary", max_length=80)
+
+
+class ScrapedPage(Model):
+    url: HttpUrl
+    title: str
+    publisher: str
+    text: str
+    published_at: date | None = None
+    source_type: str = "web"
+    trusted: bool = False
+
+
+class ToolCall(Model):
+    id: str
+    name: str
+    arguments: str
+
+
+class ModelTurn(Model):
+    content: str = ""
+    reasoning_content: str | None = None
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    usage: dict[str, int] = Field(default_factory=dict)
+
+
+class AnswerClaim(Model):
+    text: str = Field(min_length=1, max_length=2000)
+    kind: Literal["fact", "calculation", "interpretation"] = "fact"
+    evidence_ids: list[str] = Field(min_length=1, max_length=12)
+
+
+class ResearchAnswer(Model):
+    conclusion: str = Field(default="", max_length=2000)
+    claims: list[AnswerClaim] = Field(default_factory=list, max_length=30)
+    insufficient_evidence: bool = False
+
+
+class MetricCandidate(Metric):
+    definition: str = Field(min_length=3, max_length=300)
+    quotation: str = Field(min_length=5, max_length=1200)
+
+
+class RefreshRequest(Model):
+    max_sources: int = Field(default=12, ge=1, le=12)
+
+
+class RefreshResult(Model):
+    run_id: str
+    started_at: datetime
+    completed_at: datetime
+    status: Literal["complete", "partial", "failed"]
+    baseline: bool
+    new_sources: list[str] = Field(default_factory=list)
+    updated_sources: list[str] = Field(default_factory=list)
+    unchanged: int = 0
+    metric_changes: list[str] = Field(default_factory=list)
+    failures: list[str] = Field(default_factory=list)
+    briefing: str
+    source_snapshot: dict[str, str] = Field(default_factory=dict)
+    metric_snapshot: list[Metric] = Field(default_factory=list)
+
+
+class AgentProvider(Protocol):
+    def complete(self, messages: list[dict], tools: list[dict], timeout: float) -> ModelTurn: ...
+
+
+class WebClient(Protocol):
+    def search(self, query: WebSearchQuery, timeout: float = 30) -> list[WebHit]: ...
+    def scrape(self, query: ScrapeQuery, timeout: float = 60) -> ScrapedPage: ...

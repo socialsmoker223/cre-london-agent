@@ -140,6 +140,7 @@ def test_unrelated_current_question_and_numeric_commentary(tmp_path):
         service.ingest(
             IngestRequest(
                 title="Unverified numerical commentary",
+                demo=True,
                 publisher="Test",
                 text="Office quality rent has reached 9999 GBP per square foot.",
                 published_at=date.today(),

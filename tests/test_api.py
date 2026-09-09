@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from london_monitor.api import create_app
-from london_monitor.models import ChatResponse, IngestRequest, MetricQuery, Trace
+from london_monitor.models import ChatResponse, IngestRequest, MetricQuery, RefreshResult, Trace
 
 
 class StubService:
@@ -26,6 +26,18 @@ class StubService:
     def ingest(self, request: IngestRequest):
         return {"chunks": 1, "duplicate": False}
 
+    def status(self):
+        return {"mode": "live", "status": "ok"}
+
+    def latest_refresh(self):
+        return None
+
+    def refresh(self, request):
+        return RefreshResult(
+            run_id="r1", started_at="2026-09-09T00:00:00Z", completed_at="2026-09-09T00:00:01Z",
+            status="complete", baseline=False, briefing="Synthetic refresh",
+        )
+
 
 def test_injected_service_and_static_page():
     service = StubService()
@@ -39,6 +51,9 @@ def test_injected_service_and_static_page():
         assert response.status_code == 200
         assert service.query.submarkets == ["City"]
         assert client.get("/").status_code == 200
+        assert client.get("/api/status").json()["mode"] == "live"
+        assert client.get("/api/refresh").json() is None
+        assert client.post("/api/refresh", json={}).json()["status"] == "complete"
 
 
 def test_validation_and_safe_errors():

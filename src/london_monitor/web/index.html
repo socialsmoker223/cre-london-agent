@@ -6,12 +6,12 @@
   <link rel="stylesheet" href="/static/styles.css"><style>.hidden{display:none}</style>
 </head>
 <body>
-  <header class="topbar"><a class="brand" href="/"><span class="mark">L</span><span>London<br><b>Market Monitor</b></span></a><span class="demo-pill">DEMO DATA</span></header>
+  <header class="topbar"><a class="brand" href="/"><span class="mark">L</span><span>London<br><b>Market Monitor</b></span></a><span class="demo-pill" id="mode-badge">LOADING</span></header>
   <main class="shell">
     <section class="hero"><p class="eyebrow">EVIDENCE GROUNDED INTELLIGENCE</p><h1>See the market<br><em>with clarity.</em></h1><p class="lede">Ask about London offices, rents, vacancy, supply and the macro forces shaping them.</p></section>
     <section class="ask card"><form id="chat-form"><label for="question">What do you want to know?</label><div class="prompt-row"><textarea id="question" rows="2" maxlength="2000" placeholder="e.g. What is happening to prime rents in the City?"></textarea><button type="submit" id="ask">Ask <span>↗</span></button></div><label class="context-option"><input type="checkbox" id="use-context"> Use previous question as context</label><div class="examples" id="examples"><button type="button">Compare prime rents across City and West End</button><button type="button">What is the current vacancy picture?</button><button type="button">Summarise new office supply</button></div></form><p class="status" id="status" aria-live="polite"></p></section>
     <section id="answer" class="answer hidden"></section>
-    <section class="dashboard"><div class="section-head"><div><p class="eyebrow">MARKET SNAPSHOT</p><h2>Key indicators</h2></div></div><div id="metrics" class="metrics"><div class="skeleton"></div></div></section>
+    <section class="dashboard"><div class="section-head"><div><p class="eyebrow">MARKET SNAPSHOT</p><h2>Key indicators</h2></div><button type="button" id="refresh" class="examples button">Refresh data</button></div><p id="refresh-status" class="status" aria-live="polite"></p><section id="briefing" class="card hidden" aria-live="polite"></section><div id="metrics" class="metrics"><div class="skeleton"></div></div></section>
   </main>
   <footer>London Market Monitor <span>·</span> Built for evidence-led decisions</footer>
   <script src="/static/app.js"></script>

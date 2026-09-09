@@ -1,6 +1,7 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 WORKDIR /app
-ENV UV_COMPILE_BYTECODE=1 LONDON_DATA_DIR=/app/.runtime UV_CACHE_DIR=/tmp/uv-cache
+ENV UV_COMPILE_BYTECODE=1 LONDON_DATA_DIR=/app/.runtime \
+    EMBEDDING_CACHE=/app/.runtime/embeddings UV_CACHE_DIR=/tmp/uv-cache
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 COPY data ./data
