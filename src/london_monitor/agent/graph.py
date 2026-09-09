@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from london_monitor.agent.skills import SKILLS
 from london_monitor.models import (
     AgentProvider,
+    ChangeQuery,
     ChatRequest,
     ChatResponse,
     Citation,
@@ -49,6 +50,11 @@ class LiveState(TypedDict, total=False):
 
 
 TOOL_MODELS = {
+    "compare_market_changes": (
+        ChangeQuery,
+        "Compare reporting periods or changes since last refresh: deterministic metric "
+        "movements and paired previous/new text evidence for risk and theme comparison.",
+    ),
     "query_market_metrics": (MetricQuery, "Query validated numeric observations and comparisons."),
     "search_market_evidence": (SearchQuery, "Semantic search over ingested full source evidence."),
     "search_web": (
@@ -92,6 +98,22 @@ def validate_answer(answer: ResearchAnswer, evidence: dict[str, Evidence]) -> li
             i.startswith("calc:") for i in claim.evidence_ids
         ):
             errors.append("Calculation requires deterministic tool evidence")
+        if claim.change_status:
+            refs = [evidence[i] for i in claim.evidence_ids]
+            prior = [e for e in refs if e.comparison_role == "previous"]
+            current = [e for e in refs if e.comparison_role in {"new", "current"}]
+            if claim.kind != "interpretation":
+                errors.append("Text signal changes must be labeled interpretation")
+            if not current:
+                errors.append("Signal change requires current/new comparison evidence")
+            if claim.change_status in {"strengthened", "weakened"} and not prior:
+                errors.append("Risk movement requires previous and current evidence")
+            if claim.change_status == "contradictory" and len({e.source_id for e in refs}) < 2:
+                errors.append("Contradictory signal requires evidence from both sides")
+            if claim.change_status == "emerging" and len({
+                e.publisher.casefold().strip() for e in current if e.publisher
+            }) < 2:
+                errors.append("Emerging theme requires at least two current publishers")
     if numbers(answer.conclusion):
         errors.append("Keep numerical conclusions in cited claims")
     if not answer.claims and not answer.insufficient_evidence:
@@ -183,6 +205,7 @@ def build_graph(service, provider: AgentProvider):
         messages = list(state["messages"])
         for call in state["pending"]:
             label = {
+                "compare_market_changes": "Comparing market periods and new evidence",
                 "query_market_metrics": "Querying validated market indicators",
                 "search_market_evidence": "Searching collected source excerpts",
                 "search_web": "Searching the web for market sources",
@@ -197,7 +220,11 @@ def build_graph(service, provider: AgentProvider):
                 if call.name not in TOOL_MODELS:
                     raise ValueError("Unknown tool")
                 args = TOOL_MODELS[call.name][0].model_validate_json(call.arguments)
-                if call.name == "search_web":
+                if call.name == "compare_market_changes":
+                    result, chunks = service.market_changes(args)
+                    state["evidence"].update({e.id: e for e in chunks})
+                    state["warnings"].extend(result["warnings"])
+                elif call.name == "search_web":
                     if state["searches"] >= 3:
                         raise ValueError("Web search budget exhausted")
                     state["searches"] += 1
@@ -368,6 +395,7 @@ def build_graph(service, provider: AgentProvider):
             Claim(
                 text=c.text,
                 kind=c.kind,
+                change_status=c.change_status,
                 source_ids=list(
                     dict.fromkeys(
                         s

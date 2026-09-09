@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS refreshes (run_id TEXT PRIMARY KEY, payload TEXT NOT 
                 ],
             )
 
-    def query_metrics(self, query: MetricQuery) -> list[Metric]:
+    def query_metrics(self, query: MetricQuery, *, unlimited: bool = False) -> list[Metric]:
         with self._lock:
             clauses, params = [], []
             if query.submarkets:
@@ -179,8 +179,8 @@ CREATE TABLE IF NOT EXISTS refreshes (run_id TEXT PRIMARY KEY, payload TEXT NOT 
                 "SELECT m.metric,m.value,m.unit,m.period,m.submarket,m.source_id,"
                 "m.definition,m.quotation FROM metrics m JOIN sources s ON s.id=m.source_id "
                 f"WHERE {' AND '.join(clauses)} ORDER BY m.period DESC,m.metric,m.submarket,"
-                "m.source_id LIMIT ?",
-                [*params, query.limit],
+                "m.source_id" + ("" if unlimited else " LIMIT ?"),
+                params if unlimited else [*params, query.limit],
             ).fetchall()
             return [Metric.model_validate(dict(r)) for r in rows]
 

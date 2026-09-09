@@ -199,6 +199,11 @@ class MarketService:
     def metric_evidence(self, query: MetricQuery):
         return metric_evidence(self.metrics(query), self.sources())
 
+    def market_changes(self, query):
+        from london_monitor.changes import change_evidence
+
+        return change_evidence(self, query)
+
     def refresh(self, request: RefreshRequest) -> RefreshResult:
         from london_monitor.refresh import refresh
 
@@ -308,38 +313,10 @@ def metric_evidence(rows, sources):
             )
         )
         grouped[(m.metric, m.unit, m.definition)].append(m)
-    for group in grouped.values():
-        for market in {m.submarket for m in group}:
-            series = [m for m in group if m.submarket == market]
-            by_period = defaultdict(list)
-            for m in series:
-                by_period[m.period].append(m)
-            periods = sorted(by_period)
-            if len(periods) < 2:
-                continue
-            older, newer = by_period[periods[-2]], by_period[periods[-1]]
-            if len({m.value for m in older}) != 1 or len({m.value for m in newer}) != 1:
-                continue
-            a, b = older[0], newer[0]
-            unit = "percentage points" if b.unit == "%" else b.unit
-            # Each calculation cites both input observations through its excerpt.
-            text = (
-                f"{market} {b.metric} changed {b.value - a.value:+g} {unit}: "
-                f"{a.value:g} in {a.period} to {b.value:g} in {b.period}. "
-                f"Source inputs: {a.source_id}, {b.source_id}."
-            )
-            evidence.append(
-                Evidence(
-                    id=f"calc:{market}:{b.metric}:{b.period}:{b.unit}:{b.definition}",
-                    source_id=b.source_id,
-                    source_ids=list(dict.fromkeys([a.source_id, b.source_id])),
-                    excerpt=text,
-                    category="calculation",
-                    submarket=market,
-                    published_at=sources[b.source_id].published_at,
-                    location="Python calculation",
-                )
-            )
+    from london_monitor.changes import metric_changes
+    from london_monitor.models import ChangeQuery
+
+    evidence.extend(e for e in metric_changes([], rows, ChangeQuery()) if e.id.startswith("calc:"))
     for group in grouped.values():
         observations = defaultdict(list)
         for m in group:

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 Submarket = Literal["City", "West End", "Canary Wharf", "Midtown / Fringe", "London"]
 MetricName = Literal["prime_rent", "grade_a_rent", "vacancy", "take_up", "bank_rate"]
 Skill = Literal["market_pulse", "comparison", "supply", "macro", "evidence", "metrics"]
+ChangeStatus = Literal["new", "strengthened", "weakened", "contradictory", "emerging"]
 
 
 class Model(BaseModel):
@@ -60,6 +61,8 @@ class Evidence(Model):
     source_ids: list[str] = Field(default_factory=list)
     score: float = 0
     location: str = ""
+    comparison_role: Literal["previous", "current", "new"] | None = None
+    publisher: str = ""
 
 
 class MetricQuery(Model):
@@ -68,6 +71,14 @@ class MetricQuery(Model):
     period: str | None = Field(default=None, pattern=r"^\d{4}-Q[1-4]$")
     latest: bool = True
     limit: int = Field(default=100, ge=1, le=200)
+
+
+class ChangeQuery(Model):
+    basis: Literal["reporting_period", "last_update"] = "reporting_period"
+    period: str | None = Field(default=None, pattern=r"^\d{4}-Q[1-4]$")
+    submarkets: list[Submarket] = Field(default_factory=list, max_length=5)
+    relative_threshold_pct: float = Field(default=5, gt=0, allow_inf_nan=False)
+    rate_threshold_pp: float = Field(default=0.5, gt=0, allow_inf_nan=False)
 
 
 class SearchQuery(Model):
@@ -114,6 +125,7 @@ class Claim(Model):
     text: str
     kind: Literal["fact", "calculation", "interpretation"] = "fact"
     source_ids: list[str] = Field(min_length=1)
+    change_status: ChangeStatus | None = None
 
 
 class Trace(Model):
@@ -149,7 +161,7 @@ class Store(Protocol):
     def add_source(self, source: Source) -> bool: ...
     def list_sources(self) -> list[Source]: ...
     def add_metrics(self, metrics: list[Metric]) -> None: ...
-    def query_metrics(self, query: MetricQuery) -> list[Metric]: ...
+    def query_metrics(self, query: MetricQuery, *, unlimited: bool = False) -> list[Metric]: ...
     def save_document(self, source: Source, text: str) -> bool: ...
     def get_document(self, source_id: str) -> "Document | None": ...
     def list_documents(self) -> list["Document"]: ...
@@ -217,6 +229,7 @@ class AnswerClaim(Model):
     text: str = Field(min_length=1, max_length=2000)
     kind: Literal["fact", "calculation", "interpretation"] = "fact"
     evidence_ids: list[str] = Field(min_length=1, max_length=12)
+    change_status: ChangeStatus | None = None
 
 
 class ResearchAnswer(Model):
@@ -248,6 +261,9 @@ class RefreshResult(Model):
     briefing: str
     source_snapshot: dict[str, str] = Field(default_factory=dict)
     metric_snapshot: list[Metric] = Field(default_factory=list)
+    evidence_changes: list[Claim] = Field(default_factory=list)
+    identified_signals: list[Claim] = Field(default_factory=list)
+    comparison_warnings: list[str] = Field(default_factory=list)
 
 
 class AgentProvider(Protocol):

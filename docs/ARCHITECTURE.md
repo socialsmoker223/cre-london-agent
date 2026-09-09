@@ -89,3 +89,36 @@ and verbatim quotations. A duplicate document without metrics retries extraction
 Chat collection calls `collect(..., with_metrics=False)`: source text is sufficient for cited
 reported facts. Refresh performs metric extraction for SQL comparisons; this avoids spending
 the chat deadline on a separate extraction call for every newly read page.
+
+## Market change detection
+
+`compare_market_changes(ChangeQuery)` is the chat tool for the primary change workflow.
+`basis=reporting_period` compares the requested (or latest validated) quarter with its immediate
+predecessor; `basis=last_update` compares current observations and document identities with the
+last saved refresh, including documents ingested by chat or direct ingestion between refreshes.
+Missing baselines, same-period revisions, conflicting reports and quarter gaps remain explicit.
+Comparisons require matching metric, geography, unit and definition. Both input sources are cited;
+percent change is `(current - previous) / abs(previous) * 100`, undefined for zero baselines.
+Default screening thresholds are 5% relative change, or 0.5 percentage points for rates, inclusive.
+The tool accepts `relative_threshold_pct` and `rate_threshold_pp` overrides. These are transparent
+screening rules, not statistical significance or calibrated investment recommendations.
+Refresh snapshots and change queries read all validated metrics, independent of the public query
+row limit. Regular metric evidence shares the same deterministic period calculation.
+
+Text comparisons pair stored previous/current excerpts, keeping publication and ingestion dates
+separate. Reporting-period text windows use publication quarters, not inferred observation dates;
+undated publications are excluded from these windows but included in ingestion comparisons.
+Historical document versions remain available for the preceding publication quarter. Each window
+is bounded to 12 documents and 5,000 characters per document, with explicit coverage warnings.
+The model must check event dates, geography and independent reporting before interpreting signals.
+Strengthened/weakened risks require citations to both windows; silence does not mean weakening.
+Emerging themes require multiple current publishers; repeated chunks and syndicated reports do not
+establish independent corroboration. Status-labelled claims are interpretations, not measured facts.
+Grounding checks enforce window/publisher references and numerical provenance, not semantic truth.
+
+Refresh adds one bounded model call to summarize changed signals, stores cited `evidence_changes`,
+and retains up to 30 `identified_signals` hypotheses for later reassessment, including across
+unchanged refreshes. First collection establishes a baseline without claiming text signal changes.
+Analysis failures preserve numerical results and mark the refresh incomplete. Saved briefing text
+and chat responses prioritize movements and changed signals over a full market-state recap.
+No new dependencies or storage tables are required; existing refresh JSON accepts the added fields.
