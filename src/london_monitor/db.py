@@ -184,6 +184,12 @@ CREATE TABLE IF NOT EXISTS refreshes (run_id TEXT PRIMARY KEY, payload TEXT NOT 
             ).fetchall()
             return [Metric.model_validate(dict(r)) for r in rows]
 
+    def has_metrics(self, source_id: str) -> bool:
+        with self._lock:
+            return self.connection.execute(
+                "SELECT 1 FROM metrics WHERE source_id=? LIMIT 1", (source_id,)
+            ).fetchone() is not None
+
     def add_projects(self, projects: list[Project]) -> None:
         with self._lock, self.connection:
             self.connection.executemany(

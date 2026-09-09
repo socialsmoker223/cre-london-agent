@@ -6,6 +6,9 @@ const status = $('#status');
 const context = $('#use-context');
 let previousQuestion = null;
 let conversationId = null;
+let refreshTimer = null;
+let refreshPending = false;
+context.disabled = true;
 
 document.querySelectorAll('.examples button').forEach((button) => button.addEventListener('click', () => {
   question.value = button.textContent;
@@ -26,10 +29,26 @@ function cell(row, value, tag = 'td') {
   return node;
 }
 
-function renderAnswer(data) {
+function sourceLink(parent, source) {
+  if (!source?.url) return text(parent, source?.publisher || 'Unknown source');
+  const link = text(parent, source.title, 'a');
+  link.href = source.url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  return link;
+}
+
+async function requestJson(url, options) {
+  const response = await fetch(url, options);
+  const data = await response.json();
+  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Please check your request and retry.');
+  return data;
+}
+
+function renderAnswer(data, askedQuestion) {
   answer.replaceChildren();
   answer.classList.remove('hidden');
-  text(answer, data.demo ? 'DEMO DATA · ANSWER' : 'MARKET ANSWER', 'div').className = 'answer-meta';
+  text(answer, `Question · ${askedQuestion}`, 'p').className = 'answer-meta';
   const fallback = data.incomplete && data.answer.startsWith('Evidence-only fallback');
   text(answer, fallback ? 'Source evidence' : 'Market answer', 'h2');
   text(answer, fallback ? 'A verified synthesis is unavailable. Review the cited source excerpts below.' : data.answer, 'p').className = 'answer-body';
@@ -57,22 +76,26 @@ function renderAnswer(data) {
   });
   answer.append(citations);
   if (data.trace) {
-    const trace = document.createElement('div');
+    const trace = document.createElement('details');
     trace.className = 'trace';
-    text(trace, `Trace · ${[...(data.trace.skills || []), ...(data.trace.tools || [])].join(' · ')}`);
-    text(trace, ` · ${data.trace.source_count || data.citations.length} sources · ${(data.trace.duration_ms / 1000).toFixed(1)}s · ${data.trace.failures.length} failures`);
-    if (Object.keys(data.trace.usage || {}).length) text(trace, ` · tokens ${JSON.stringify(data.trace.usage)}`);
+    text(trace, `Research activity · ${data.citations.length} sources · ${(data.trace.duration_ms / 1000).toFixed(1)}s`, 'summary');
+    text(trace, [...new Set(data.trace.tools || [])].map(name => name.replaceAll('_', ' ')).join(' → '), 'p');
+    (data.trace.failures || []).forEach(failure => text(trace, failure, 'p'));
     answer.append(trace);
   }
   if (data.evidence?.length) {
     const evidence = document.createElement('details');
     evidence.className = 'citations';
     text(evidence, `Supporting excerpts (${data.evidence.length})`, 'summary');
-    data.evidence.forEach((item) => text(evidence, `${item.location || 'Source excerpt'} · ${item.excerpt}`, 'p'));
+    data.evidence.forEach((item) => {
+      const source = data.citations.find(citation => citation.source.id === item.source_id)?.source;
+      text(evidence, `${source?.title || 'Source'} · ${item.location || 'Source excerpt'}`, 'h3');
+      text(evidence, item.excerpt, 'p');
+    });
     answer.append(evidence);
   }
-  status.dataset.state = data.incomplete ? 'error' : 'success';
-  status.textContent = data.incomplete ? 'Answer ready with evidence gaps.' : 'Answer ready.';
+  status.dataset.state = data.incomplete || data.insufficient_evidence ? 'error' : 'success';
+  status.textContent = data.insufficient_evidence ? 'See the scope or evidence limitation below.' : data.incomplete ? 'Answer ready with evidence gaps.' : 'Answer ready.';
 }
 
 form.addEventListener('submit', async (event) => {
@@ -89,25 +112,29 @@ form.addEventListener('submit', async (event) => {
   question.removeAttribute('aria-invalid');
   status.dataset.state = 'loading';
   form.setAttribute('aria-busy', 'true');
-  answer.classList.add('hidden');
   ask.disabled = true;
-  status.textContent = 'Researching sources and checking evidence (up to three minutes)…';
+  status.textContent = 'Researching sources and checking evidence (up to three minutes). Your last answer stays visible below.';
+  const started = Date.now();
+  const timer = setInterval(() => {
+    status.textContent = `Researching sources and checking evidence · ${Math.round((Date.now() - started) / 1000)}s elapsed…`;
+  }, 10000);
   try {
     const payload = { question: value };
     if (context.checked && previousQuestion) payload.previous_question = previousQuestion;
     if (context.checked && conversationId) payload.conversation_id = conversationId;
-    const response = await fetch('/api/chat', {
+    const result = await requestJson('/api/chat', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
     });
-    if (!response.ok) throw new Error('Request failed');
-    const result = await response.json();
-    renderAnswer(result);
+    renderAnswer(result, value);
     previousQuestion = value;
     if (result?.conversation_id) conversationId = result.conversation_id;
-  } catch {
+    context.disabled = false;
+    await loadMetrics();
+  } catch (error) {
     status.dataset.state = 'error';
-    status.textContent = 'The monitor is temporarily unavailable. Please try again.';
+    status.textContent = `${error.message === 'Failed to fetch' ? 'The monitor is unavailable. Please retry.' : error.message} Your last answer has been kept.`;
   } finally {
+    clearInterval(timer);
     ask.disabled = false;
     form.removeAttribute('aria-busy');
   }
@@ -137,7 +164,13 @@ async function loadMetrics() {
       cell(row, `${metric.value} ${metric.unit}`);
       cell(row, metric.period);
       const sourceCell = cell(row, '');
-      text(sourceCell, source ? `${source.demo ? 'Demo · ' : ''}${source.publisher}` : metric.source_id);
+      const details = document.createElement('details');
+      text(details, source?.publisher || metric.source_id, 'summary');
+      sourceLink(details, source);
+      text(details, `Definition · ${metric.definition || 'Not specified'}`, 'p');
+      text(details, metric.quotation || 'No supporting quotation retained.', 'blockquote');
+      text(details, `Published · ${source?.published_at || 'Unknown'} · Retrieved · ${source?.retrieved_at ? new Date(source.retrieved_at).toLocaleDateString() : 'Unknown'}`, 'p');
+      sourceCell.append(details);
       if (new Set(values.map(item => item.value)).size > 1) text(sourceCell, 'Conflicting estimate', 'small').className = 'conflict';
       row.append(sourceCell);
       body.append(row);
@@ -145,7 +178,18 @@ async function loadMetrics() {
     table.append(body);
     const container = $('#metrics');
     container.replaceChildren();
-    container.append(metrics.length ? table : text(container, 'No metrics available yet.'));
+    if (metrics.length) container.append(table);
+    else text(container, 'No validated numerical indicators yet. Refresh data to collect evidence; available reports are listed below.');
+    const library = $('#sources');
+    library.replaceChildren();
+    const list = Object.values(sources);
+    text(library, `Collected sources (${list.length})`, 'summary');
+    list.forEach(source => {
+      const item = document.createElement('p');
+      sourceLink(item, source);
+      text(item, ` · ${source.publisher} · Published ${source.published_at || 'date unknown'}`);
+      library.append(item);
+    });
   } catch {
     $('#metrics').replaceChildren();
     text($('#metrics'), 'Metrics are unavailable right now.');
@@ -157,14 +201,29 @@ async function loadStatus() {
     const response = await fetch('/api/status');
     if (!response.ok) throw new Error();
     const data = await response.json();
-    const live = data.mode === 'live' || data.live === true;
-    $('#mode-badge').textContent = live ? 'LIVE MODE' : 'DEMO DATA';
-    $('#mode-badge').classList.toggle('live-pill', live);
-    $('#refresh').disabled = !live;
-    if (!live) $('#refresh-status').textContent = 'Refresh is available in live mode.';
+    $('#mode-badge').textContent = 'LIVE RESEARCH';
+    $('#provider-status').textContent = `${data.provider} · ${data.model} · ${data.sources} collected sources`;
+    $('#ask').disabled = form.getAttribute('aria-busy') === 'true';
+    $('#refresh').disabled = refreshPending || Boolean(data.refresh_progress);
+    if (data.refresh_progress) {
+      $('#refresh-status').dataset.state = 'loading';
+      $('#refresh-status').textContent = `${data.refresh_progress.stage} · ${data.refresh_progress.documents} documents collected…`;
+      watchRefresh();
+    } else if (refreshTimer && !refreshPending) {
+      clearInterval(refreshTimer);
+      refreshTimer = null;
+      $('#refresh-status').textContent = 'Refresh finished. See the saved briefing below.';
+      await Promise.all([loadBriefing(), loadMetrics()]);
+    }
   } catch {
     $('#mode-badge').textContent = 'STATUS UNAVAILABLE';
+    $('#provider-status').textContent = 'Cannot reach the configured research service.';
+    $('#refresh').disabled = true;
   }
+}
+
+function watchRefresh() {
+  if (!refreshTimer) refreshTimer = setInterval(loadStatus, 3000);
 }
 
 async function loadBriefing() {
@@ -178,6 +237,15 @@ async function loadBriefing() {
       briefing.classList.remove('hidden');
       text(briefing, `Last refresh · ${data.status} · ${new Date(data.completed_at).toLocaleString()}`, 'h3');
       text(briefing, data.briefing || 'No briefing available.', 'p');
+      if (data.failures?.length) {
+        const failures = document.createElement('details');
+        text(failures, `Collection issues (${data.failures.length}) and next steps`, 'summary');
+        const list = document.createElement('ul');
+        data.failures.forEach(failure => text(list, failure, 'li'));
+        failures.append(list);
+        text(failures, 'Retry refresh to recheck searches and extraction. If all topics return no results, check Firecrawl logs for search-provider blocking or quota errors before retrying. Existing evidence is retained.', 'p');
+        briefing.append(failures);
+      }
     }
   } catch { /* briefing is optional */ }
 }
@@ -186,22 +254,23 @@ $('#refresh').addEventListener('click', async () => {
   const button = $('#refresh');
   const refreshStatus = $('#refresh-status');
   button.disabled = true;
+  refreshPending = true;
+  watchRefresh();
   refreshStatus.dataset.state = 'loading';
   refreshStatus.textContent = 'Refreshing evidence (up to five minutes)…';
   try {
-    const response = await fetch('/api/refresh', {
+    const data = await requestJson('/api/refresh', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}',
     });
-    if (!response.ok) throw new Error();
-    const data = await response.json();
     refreshStatus.dataset.state = data.status === 'complete' ? 'success' : 'error';
     refreshStatus.textContent = `Refresh ${data.status}.`;
     await Promise.all([loadBriefing(), loadMetrics()]);
-  } catch {
+  } catch (error) {
     refreshStatus.dataset.state = 'error';
-    refreshStatus.textContent = 'Refresh failed. Please try again.';
+    refreshStatus.textContent = `Refresh failed: ${error.message}. Existing evidence has been kept.`;
   } finally {
-    button.disabled = false;
+    refreshPending = false;
+    await loadStatus();
   }
 });
 loadMetrics();

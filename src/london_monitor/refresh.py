@@ -67,7 +67,7 @@ def _metric_changes(previous, current):
 def refresh(service, request: RefreshRequest) -> RefreshResult:
     started = datetime.now(UTC)
     deadline = time.monotonic() + 300
-    previous = service.store.latest_successful_refresh()
+    previous = service.store.latest_refresh()
     before = previous.source_snapshot if previous else {}
     old_metrics = previous.metric_snapshot if previous else []
     new_sources, updated_sources, failures = [], [], []
@@ -78,6 +78,7 @@ def refresh(service, request: RefreshRequest) -> RefreshResult:
         if time.monotonic() >= deadline:
             break
         try:
+            service.refresh_progress = {"stage": f"Searching {market}", "documents": len(visited)}
             hits = service.web.search(
                 WebSearchQuery(query=query, limit=3), timeout=min(30, deadline - time.monotonic())
             )
@@ -86,22 +87,23 @@ def refresh(service, request: RefreshRequest) -> RefreshResult:
             candidates[market].extend(hits[:3])
         except Exception as exc:
             failures.append(f"{market}: {type(exc).__name__}: {str(exc)[:120]}")
-    quota = request.max_sources // len(QUERIES)
-    selected = []
-    for market, _ in QUERIES:
-        selected.extend((market, hit) for hit in candidates[market][:quota])
-    if len(selected) < request.max_sources:
-        for market, _ in QUERIES:
-            for hit in candidates[market][quota:]:
-                if len(selected) >= request.max_sources:
-                    break
-                selected.append((market, hit))
+    # Cover each topic before spending the remaining budget on a second source.
+    selected = [
+        (market, candidates[market][rank])
+        for rank in range(3)
+        for market, _ in QUERIES
+        if len(candidates[market]) > rank
+    ][:request.max_sources]
     for market, hit in selected:
         url = str(hit.url)
         if url in visited or time.monotonic() >= deadline:
             continue
         visited.add(url)
         try:
+            service.refresh_progress = {
+                "stage": f"Reading {hit.title or url}",
+                "documents": len(new_sources) + len(updated_sources) + unchanged,
+            }
             result, _ = service.collect(
                 ScrapeQuery(
                     url=hit.url,
@@ -143,7 +145,7 @@ def refresh(service, request: RefreshRequest) -> RefreshResult:
     )
     baseline = previous is None
     briefing = (
-        "Baseline collection" if baseline else "Changes since the previous successful refresh"
+        "Baseline collection" if baseline else "Changes since the previous refresh"
     )
     briefing += (
         f": {len(new_sources)} new documents, {len(updated_sources)} revised documents, "

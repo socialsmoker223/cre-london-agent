@@ -61,7 +61,7 @@ def _remaining(deadline: float) -> float:
 
 def _parse_hits(data: dict) -> list[WebHit]:
     payload = data.get("data", data)
-    hits = payload.get("web", payload) if isinstance(payload, dict) else payload
+    hits = payload.get("web", []) if isinstance(payload, dict) else payload
     if not isinstance(hits, list):
         raise ValueError("Firecrawl returned no search results")
     return [

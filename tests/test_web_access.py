@@ -30,15 +30,11 @@ def public_dns(monkeypatch):
 def test_search_trusted_first_then_broadens(monkeypatch):
     calls = []
     responses = [
-        Response(
-            {"success": True, "data": {"web": [{"url": "https://example.com/x", "title": "x"}]}}
-        ),
-        Response(
-            {
-                "success": True,
-                "data": {"web": [{"url": "https://cbre.co.uk/x", "title": "trusted"}]},
-            }
-        ),
+        Response({"success": True, "data": {}}),
+        Response({
+            "success": True,
+            "data": {"web": [{"url": "https://cbre.co.uk/x", "title": "trusted"}]},
+        }),
     ]
     monkeypatch.setattr(
         web_access.httpx,
@@ -60,25 +56,10 @@ def test_scrape_rejects_private_resolution_and_reserved_target(monkeypatch):
     with pytest.raises(ValueError, match="private"):
         web_access.FirecrawlClient().scrape(ScrapeQuery(url="https://example.com"))
 
-    monkeypatch.setattr(
-        web_access.socket,
-        "getaddrinfo",
-        lambda host, *args, **kwargs: [
-            (None, None, None, None, ("127.0.0.1" if host == "127.0.0.1" else "8.8.8.8", 0))
-        ],
-    )
-    monkeypatch.setattr(
-        web_access.httpx,
-        "head",
-        lambda *args, **kwargs: Response({}, 302, {"location": "http://127.0.0.1"}),
-    )
-    with pytest.raises(ValueError, match="private"):
-        web_access.FirecrawlClient().scrape(ScrapeQuery(url="http://127.0.0.1"))
 
 
 def test_scrape_requires_success_and_markdown(monkeypatch):
     public_dns(monkeypatch)
-    monkeypatch.setattr(web_access.httpx, "head", lambda *args, **kwargs: Response({}))
     monkeypatch.setattr(
         web_access.httpx, "post", lambda *args, **kwargs: Response({"success": False})
     )

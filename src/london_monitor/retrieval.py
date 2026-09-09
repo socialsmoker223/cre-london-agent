@@ -1,6 +1,5 @@
-"""Semantic Qdrant retrieval and deterministic offline fallback."""
+"""Semantic Qdrant retrieval with model identity checks."""
 
-import hashlib
 import re
 import threading
 import uuid
@@ -13,28 +12,8 @@ from .models import Evidence, Retriever, SearchQuery, Source, Submarket
 
 _DIMENSION = 384
 _COLLECTION = "evidence_bge_small_v1_5"
-_TOKEN = re.compile(r"[\w]+", re.UNICODE)
-_STOPWORDS = {"a", "an", "and", "for", "in", "of", "on", "the", "to", "with"}
 _MODEL_NAME = "BAAI/bge-small-en-v1.5"
 _MODEL_POINT = "00000000-0000-0000-0000-000000000001"
-
-
-def _terms(text):
-    return {
-        t[:-1] if t.endswith("s") and len(t) > 3 else t
-        for t in _TOKEN.findall(text.casefold())
-        if t not in _STOPWORDS
-    }
-
-
-def _vector(text):
-    values = [0.0] * _DIMENSION
-    for token in _terms(text):
-        digest = hashlib.sha256(token.encode()).digest()
-        i = int.from_bytes(digest[:4], "big") % _DIMENSION
-        values[i] += -1.0 if digest[4] & 1 else 1.0
-    norm = sum(x * x for x in values) ** 0.5
-    return [x / norm for x in values] if norm else values
 
 
 def chunk_text(text: str) -> list[tuple[str, str]]:
@@ -63,7 +42,9 @@ class VectorIndex(Retriever):
             from fastembed import TextEmbedding
 
             self._embedder = TextEmbedding(
-                model_name="BAAI/bge-small-en-v1.5", cache_dir=str(cache_dir) if cache_dir else None
+                model_name="BAAI/bge-small-en-v1.5",
+                cache_dir=str(cache_dir) if cache_dir else None,
+                threads=2,
             )
         self._dimension = getattr(self._embedder, "dimension", _DIMENSION)
         self._client = QdrantClient(url=url) if url else QdrantClient(path=str(path))
@@ -98,8 +79,9 @@ class VectorIndex(Retriever):
                 )
 
     def _embed(self, texts):
-        values = self._embedder.embed(texts)
-        return [list(v) for v in values]
+        # Bound inference memory while refresh and chat share one model instance.
+        with self._lock:
+            return [list(v) for v in self._embedder.embed(texts, batch_size=16)]
 
     def index(self, source: Source, text: str, submarket: Submarket, category: str) -> int:
         chunks = chunk_text(text)
@@ -133,7 +115,6 @@ class VectorIndex(Retriever):
                         "checksum": source.checksum,
                         "trusted": source.trusted,
                         "source_type": source.source_type,
-                        "terms": sorted(_terms(excerpt)),
                     },
                 )
             )
@@ -206,6 +187,7 @@ class VectorIndex(Retriever):
                     id=str(point.id),
                     source_id=str(p["source_id"]),
                     excerpt=str(p["excerpt"]),
+                    source_title=str(p.get("title", "")),
                     category=str(p["category"]),
                     submarket=p["submarket"],
                     published_at=date.fromisoformat(p["published_at"])
@@ -220,30 +202,3 @@ class VectorIndex(Retriever):
     def close(self):
         with self._lock:
             self._client.close()
-
-
-class DemoVectorIndex(VectorIndex):
-    def __init__(self, path):
-        self._collection = "evidence_demo"
-        self._model_name = "demo-lexical"
-        self._client = QdrantClient(path=str(path))
-        self._lock = threading.RLock()
-        self._embedder = type(
-            "E",
-            (),
-            {"embed": lambda _, texts: [_vector(x) for x in texts], "dimension": _DIMENSION},
-        )()
-        self._dimension = _DIMENSION
-        with self._lock:
-            if not self._client.collection_exists("evidence_demo"):
-                self._client.create_collection(
-                    collection_name="evidence_demo",
-                    vectors_config=models.VectorParams(
-                        size=_DIMENSION, distance=models.Distance.COSINE
-                    ),
-                )
-
-    def search(self, query: SearchQuery) -> list[Evidence]:
-        results = super().search(query)
-        terms = _terms(query.query)
-        return [item for item in results if terms.intersection(_terms(item.excerpt))]

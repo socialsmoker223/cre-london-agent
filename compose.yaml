@@ -5,13 +5,14 @@ services:
     build: .
     environment:
       LONDON_MODE: ${LONDON_MODE:-live}
+      LLM_PROVIDER: ${LLM_PROVIDER:?Set LLM_PROVIDER to z.ai}
       LONDON_DATA_DIR: /app/.runtime
       QDRANT_URL: http://qdrant:6333
       FIRECRAWL_URL: http://firecrawl-api:3002
       EMBEDDING_CACHE: /app/.runtime/embeddings
-      ZAI_API_KEY: ${ZAI_API_KEY:-}
-      ZAI_API_BASE: ${ZAI_API_BASE:-https://api.z.ai/api/coding/paas/v4}
-      LLM_MODEL: ${LLM_MODEL:-glm-5.3-flash}
+      ZAI_API_KEY: ${ZAI_API_KEY:?Set ZAI_API_KEY}
+      ZAI_API_BASE: ${ZAI_API_BASE:?Set ZAI_API_BASE}
+      LLM_MODEL: ${LLM_MODEL:?Set LLM_MODEL}
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
     depends_on:

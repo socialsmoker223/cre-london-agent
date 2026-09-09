@@ -1,17 +1,11 @@
 # Stakeholder deck
 
-`london-office-market-agent.pptx` is a five-slide business storyline:
+The existing five-slide presentation is in `deliverables/london-office-market-agent.pptx`
+and `deliverables/london-office-market-agent.pdf`. Its recorded live example is historical:
+it used a directly ingested public JLL report and explicitly disclosed incomplete web discovery.
+The deck's readiness slide predates the live-only fixes and should not be used as current
+acceptance evidence. See [browser acceptance](../deliverables/browser-acceptance.md) for
+current verification and remaining search-provider limitations.
 
-1. **The brief** — why London office decisions need an evidence trail.
-2. **The product** — the question-to-answer workflow and its typed stages.
-3. **Example workflow** — a City prime-rent question through retrieval, combination and return.
-4. **Trust** — typed boundaries, bounded queries, grounding verification and transparent traces.
-5. **Next** — what the offline PoC proves and the production path it leaves open.
-
-Regenerate it with:
-
-```bash
-uv run python scripts/build_slides.py
-```
-
-The sample figures and workflow language are based on the repository's seeded demo and current graph/API interfaces. The demo dataset is synthetic; the deck makes that explicit.
+The presentation source is `scripts/build_slides.py`; regenerating it does not run acceptance
+checks. The original assessment's slide-count requirement is satisfied by the existing five slides.

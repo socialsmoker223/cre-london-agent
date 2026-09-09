@@ -21,7 +21,7 @@ class Source(Model):
     retrieved_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     source_type: str = "text"
     checksum: str
-    demo: bool = True
+    demo: bool = False
     submarket: Submarket = "London"
     category: str = "commentary"
     trusted: bool = False
@@ -53,6 +53,7 @@ class Evidence(Model):
     id: str
     source_id: str
     excerpt: str
+    source_title: str = ""
     category: str
     submarket: Submarket
     published_at: date | None = None
@@ -115,11 +116,6 @@ class Claim(Model):
     source_ids: list[str] = Field(min_length=1)
 
 
-class Draft(Model):
-    claims: list[Claim] = Field(default_factory=list)
-    usage: dict[str, int] = Field(default_factory=dict)
-
-
 class Trace(Model):
     run_id: str
     intent: str
@@ -140,9 +136,9 @@ class ChatResponse(Model):
     metrics: list[Metric]
     warnings: list[str]
     trace: Trace
-    demo: bool
+    demo: Literal[False] = False
     insufficient_evidence: bool = False
-    mode: Literal["live", "demo"] = "demo"
+    mode: Literal["live"] = "live"
     incomplete: bool = False
     conversation_id: str | None = None
     evidence: list[Evidence] = Field(default_factory=list)
@@ -168,10 +164,6 @@ class Retriever(Protocol):
     def index(self, source: Source, text: str, submarket: Submarket, category: str) -> int: ...
     def search(self, query: SearchQuery) -> list[Evidence]: ...
     def close(self) -> None: ...
-
-
-class Synthesizer(Protocol):
-    def synthesize(self, question: str, facts: list[Claim]) -> Draft: ...
 
 
 class Document(Model):

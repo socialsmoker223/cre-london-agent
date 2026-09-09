@@ -19,6 +19,7 @@ from .models import (
     Source,
     Submarket,
 )
+from .provider import ProviderUnavailable
 
 WEB_DIR = Path(__file__).with_name("web")
 
@@ -57,6 +58,8 @@ def create_app(service: Any | None = None) -> FastAPI:
     def chat(payload: ChatRequest, request: Request) -> ChatResponse:
         try:
             return request.app.state.service.chat(payload)
+        except ProviderUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         except Exception as exc:
             raise _service_error() from exc
 
