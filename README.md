@@ -259,5 +259,4 @@ The container places Hugging Face/Xet downloads in the writable app volume. Embe
 inference is serialized in batches of 16 with two CPU threads to bound concurrent chat/refresh
 memory. No Docker data volumes need to be reset.
 
-See [architecture and limits](docs/ARCHITECTURE.md) and
-[browser acceptance results](deliverables/browser-acceptance.md).
+See [architecture and limits](docs/ARCHITECTURE.md)
