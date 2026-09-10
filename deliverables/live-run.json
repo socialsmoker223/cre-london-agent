@@ -1,94 +1,216 @@
 {
-  "method": "direct httpx report fetch for setup; live answer via MarketService",
-  "firecrawl_used": false,
-  "vector_backend": "local temporary Qdrant",
-  "source": {
-    "url": "https://www.jll.com/en-uk/insights/market-dynamics/central-london-office",
-    "publisher": "JLL",
-    "published_at": null
-  },
+  "captured_at": "2026-09-10T05:33:24.337010+00:00",
+  "method": "POST /api/chat against the running Docker app; existing and newly collected live evidence",
+  "question": "Compare the publishers' reported City and West End prime rents for Q2 2026. Where do the sources disagree, and what can we conclude?",
+  "provider": "z.ai",
+  "model": "glm-5.3-flash",
+  "vector_backend": "Qdrant service used by the running app",
   "response": {
-    "answer": "Central London office demand strengthens as supply tightens\n\nPer the stored JLL 'Central London Office Market Dynamics Q2 2026' report, take-up reached 2.6 million sq.ft. in Q2 2026, up 15% quarter-on-quarter and above the 10-year average, led by a strong West End performance. [1]\n\nThe same report records supply contracting for a third consecutive quarter, a vacancy rate of 8.6%, and space under construction at its lowest level since Q3 2021. [1]\n\nThe report states prime rents rose to \u00a3190.00 per sq.ft. in the West End and \u00a395.00 per sq.ft. in the City. [1]\n\nInterpretation: Implication: with take-up above its 10-year average while supply shrinks and the construction pipeline thins, occupiers with defined requirements may benefit from starting searches and committing earlier, as choice and negotiating leverage could diminish. [1]\n\nInterpretation: Implication: the report's quoted prime rents (\u00a395.00 per sq.ft. City versus \u00a3190.00 per sq.ft. West End) point to City locations carrying a lower prime headline cost, which cost-sensitive occupiers could consider conditional on building quality and location fit. [1]\n\nInterpretation: Risk: the lowest space under construction since Q3 2021 suggests a thinner future pipeline; occupiers considering pipeline or pre-let commitments to secure options should check delivery risk scheme by scheme. [1]\n\nInterpretation: Caveat: figures are quoted from one stored report (JLL Central London Office Market Dynamics Q2 2026, assumed to be the referenced report); the live web search tool failed on three attempts and the structured metrics database returned no rows, so no independent cross-check was possible \u2014 corroborate before relying on these figures for transaction decisions. [1]",
+    "answer": "Partial brief: individually verified claims\n\nKey Metrics\n1. Fact: Savills' Q2 2026 City prime rent of £116.73 per sq ft sits below its own Q1 2026 figure of £130.80 per sq ft; both belong to Savills' average prime rent series, so this is a period movement within one series rather than a publisher disagreement. [1] [2]\n2. Interpretation: The apparent Q1-to-Q2 fall in Savills' City series may reflect that the Q1 average was lifted by trophy-building transactions, including a record £160 per sq ft top rent, so an average achieved prime rent can be deal-mix sensitive rather than a quoting level. [2] [1]\n3. Fact: Savills notes 11 City transactions above £100 per sq ft year-to-date in Q2 2026, almost matching the total for the whole of 2025, and the highest Q2 West End rent achieved was £182.50 per sq ft at Devonshire House, Mayfair. [1]\n\nEmerging Signals\n1. Interpretation: Both retrievable Q2 2026 sources point to demand polarisation toward premium space supporting top-end rents, consistent with prime-versus-secondary bifurcation, though prime rent levels alone do not establish rental growth outperformance. [1] [5]\n\nWatchlist\n1. Interpretation: To settle whether publishers genuinely disagree on Q2 2026 City and West End prime rents, the Knight Frank Q2 2026 rent section needs to be obtained, as its rent tables sit beyond the indexed portion of the report. [5]\n\nDisagreements\n1. Interpretation: Savills' Q2 2026 West End average prime rent of £175.10 per sq ft and Knight Frank's most recent retrievable West End Core headline rent of £185.00 per sq ft (Q4 2025) should not be read as conflicting: they come from different publishers, definitions (average achieved prime vs core headline quoting rent) and observation periods. [1] [3]\n2. Interpretation: On the available evidence there is no verifiable publisher disagreement on Q2 2026 prime rents: only Savills provides Q2 2026 figures, and its passages are internally consistent across duplicate report versions (City £116.73, West End £175.10). [1] [4]\n\nEvidence gaps\nKnight Frank's Q2 2026 report was retrieved, but the indexed text does not include its prime rent section or headline rent table, so KF's Q2 2026 City Core and West End Core prime rents could not be verified\nNo Q2 2026 prime rent figures from any publisher other than Savills were retrievable, so a true multi-publisher comparison is not possible\nPublisher methodologies differ (average achieved prime rents vs headline/core quoting rents), limiting like-for-like comparability even where figures exist across periods\nNo verdict-style hypothesis was tested; this is a factual comparison constrained by coverage\nSome claims failed citation checks and were omitted. The remaining claims do not establish an overall conclusion.",
     "claims": [
       {
-        "text": "Per the stored JLL 'Central London Office Market Dynamics Q2 2026' report, take-up reached 2.6 million sq.ft. in Q2 2026, up 15% quarter-on-quarter and above the 10-year average, led by a strong West End performance.",
+        "text": "Savills' Q2 2026 City prime rent of £116.73 per sq ft sits below its own Q1 2026 figure of £130.80 per sq ft; both belong to Savills' average prime rent series, so this is a period movement within one series rather than a publisher disagreement.",
         "kind": "fact",
         "source_ids": [
-          "source-37a170e5187eac97d4e9c726"
+          "source-89b1d7d78061da0a9899ebee",
+          "source-96f25db8cb0961d8edfd2b59"
+        ],
+        "change_status": null,
+        "section": "key_metrics",
+        "evidence_ids": [
+          "a5a8d66e-a2e4-5787-9382-785c5abb5c63",
+          "769400dc-2746-5a16-9247-09673f1c8ab0"
         ]
       },
       {
-        "text": "The same report records supply contracting for a third consecutive quarter, a vacancy rate of 8.6%, and space under construction at its lowest level since Q3 2021.",
+        "text": "The apparent Q1-to-Q2 fall in Savills' City series may reflect that the Q1 average was lifted by trophy-building transactions, including a record £160 per sq ft top rent, so an average achieved prime rent can be deal-mix sensitive rather than a quoting level.",
+        "kind": "interpretation",
+        "source_ids": [
+          "source-96f25db8cb0961d8edfd2b59",
+          "source-89b1d7d78061da0a9899ebee"
+        ],
+        "change_status": null,
+        "section": "key_metrics",
+        "evidence_ids": [
+          "769400dc-2746-5a16-9247-09673f1c8ab0",
+          "a5a8d66e-a2e4-5787-9382-785c5abb5c63"
+        ]
+      },
+      {
+        "text": "Savills' Q2 2026 West End average prime rent of £175.10 per sq ft and Knight Frank's most recent retrievable West End Core headline rent of £185.00 per sq ft (Q4 2025) should not be read as conflicting: they come from different publishers, definitions (average achieved prime vs core headline quoting rent) and observation periods.",
+        "kind": "interpretation",
+        "source_ids": [
+          "source-89b1d7d78061da0a9899ebee",
+          "source-130a3ea0562375496b7f0d58"
+        ],
+        "change_status": null,
+        "section": "disagreements",
+        "evidence_ids": [
+          "184b8628-6ca7-55fd-a8dd-10096ebcd7e0",
+          "9ffcf383-8716-5eff-b703-5474d5340329"
+        ]
+      },
+      {
+        "text": "On the available evidence there is no verifiable publisher disagreement on Q2 2026 prime rents: only Savills provides Q2 2026 figures, and its passages are internally consistent across duplicate report versions (City £116.73, West End £175.10).",
+        "kind": "interpretation",
+        "source_ids": [
+          "source-89b1d7d78061da0a9899ebee",
+          "source-d56ee7392b0478abe4c7bc7d"
+        ],
+        "change_status": null,
+        "section": "disagreements",
+        "evidence_ids": [
+          "a5a8d66e-a2e4-5787-9382-785c5abb5c63",
+          "7c52e88b-9e20-5fb4-8057-3413b086c047",
+          "184b8628-6ca7-55fd-a8dd-10096ebcd7e0"
+        ]
+      },
+      {
+        "text": "Savills notes 11 City transactions above £100 per sq ft year-to-date in Q2 2026, almost matching the total for the whole of 2025, and the highest Q2 West End rent achieved was £182.50 per sq ft at Devonshire House, Mayfair.",
         "kind": "fact",
         "source_ids": [
-          "source-37a170e5187eac97d4e9c726"
+          "source-89b1d7d78061da0a9899ebee"
+        ],
+        "change_status": null,
+        "section": "key_metrics",
+        "evidence_ids": [
+          "a5a8d66e-a2e4-5787-9382-785c5abb5c63",
+          "184b8628-6ca7-55fd-a8dd-10096ebcd7e0"
         ]
       },
       {
-        "text": "The report states prime rents rose to \u00a3190.00 per sq.ft. in the West End and \u00a395.00 per sq.ft. in the City.",
-        "kind": "fact",
-        "source_ids": [
-          "source-37a170e5187eac97d4e9c726"
-        ]
-      },
-      {
-        "text": "Implication: with take-up above its 10-year average while supply shrinks and the construction pipeline thins, occupiers with defined requirements may benefit from starting searches and committing earlier, as choice and negotiating leverage could diminish.",
+        "text": "Both retrievable Q2 2026 sources point to demand polarisation toward premium space supporting top-end rents, consistent with prime-versus-secondary bifurcation, though prime rent levels alone do not establish rental growth outperformance.",
         "kind": "interpretation",
         "source_ids": [
-          "source-37a170e5187eac97d4e9c726"
+          "source-89b1d7d78061da0a9899ebee",
+          "source-50c1b23c56dd9bc1ff7b65b8"
+        ],
+        "change_status": null,
+        "section": "emerging_signals",
+        "evidence_ids": [
+          "a5a8d66e-a2e4-5787-9382-785c5abb5c63",
+          "source-50c1b23c56dd9bc1ff7b65b8:article:5"
         ]
       },
       {
-        "text": "Implication: the report's quoted prime rents (\u00a395.00 per sq.ft. City versus \u00a3190.00 per sq.ft. West End) point to City locations carrying a lower prime headline cost, which cost-sensitive occupiers could consider conditional on building quality and location fit.",
+        "text": "To settle whether publishers genuinely disagree on Q2 2026 City and West End prime rents, the Knight Frank Q2 2026 rent section needs to be obtained, as its rent tables sit beyond the indexed portion of the report.",
         "kind": "interpretation",
         "source_ids": [
-          "source-37a170e5187eac97d4e9c726"
-        ]
-      },
-      {
-        "text": "Risk: the lowest space under construction since Q3 2021 suggests a thinner future pipeline; occupiers considering pipeline or pre-let commitments to secure options should check delivery risk scheme by scheme.",
-        "kind": "interpretation",
-        "source_ids": [
-          "source-37a170e5187eac97d4e9c726"
-        ]
-      },
-      {
-        "text": "Caveat: figures are quoted from one stored report (JLL Central London Office Market Dynamics Q2 2026, assumed to be the referenced report); the live web search tool failed on three attempts and the structured metrics database returned no rows, so no independent cross-check was possible \u2014 corroborate before relying on these figures for transaction decisions.",
-        "kind": "interpretation",
-        "source_ids": [
-          "source-37a170e5187eac97d4e9c726"
+          "source-50c1b23c56dd9bc1ff7b65b8"
+        ],
+        "change_status": null,
+        "section": "watchlist",
+        "evidence_ids": [
+          "source-50c1b23c56dd9bc1ff7b65b8:article:11"
         ]
       }
     ],
+    "summary": [],
     "citations": [
       {
         "number": 1,
         "source": {
-          "id": "source-37a170e5187eac97d4e9c726",
-          "title": "JLL UK real estate research",
-          "publisher": "JLL",
-          "url": "https://www.jll.com/en-uk/insights/market-dynamics/central-london-office",
-          "published_at": null,
-          "retrieved_at": "2026-09-09T14:25:58.901435Z",
-          "source_type": "text",
-          "checksum": "7bd3ad0e137ac6aee0f2e76f60b503eab207d298596cfa67de11f796d41f274d",
+          "id": "source-89b1d7d78061da0a9899ebee",
+          "title": "Savills UK | Central London Office Market Watch Q2 2026",
+          "publisher": "www.savills.co.uk",
+          "url": "https://www.savills.co.uk/research_articles/229130/393427-0/central-london-office-market-watch-q2-2026",
+          "published_at": "2026-08-06",
+          "retrieved_at": "2026-09-09T19:31:45.038818Z",
+          "source_type": "html",
+          "checksum": "f3e600b8fdeecf59e8291b8641cb6b0d075bda65ab26f2d1ff2b78ede5731fc1",
           "demo": false,
           "submarket": "London",
           "category": "commentary",
-          "trusted": false,
-          "canonical_url": "https://www.jll.com/en-uk/insights/market-dynamics/central-london-office"
+          "trusted": true,
+          "canonical_url": "https://www.savills.co.uk/research_articles/229130/393427-0/central-london-office-market-watch-q2-2026"
         },
-        "excerpt": "Take-up reached 2.6 million sq.ft. in Q2 2026 \u2014up 15% quarter-on-quarter and above the 10-year average \u2014led by a strong West End performance."
+        "excerpt": "* * * ## City and West End rents * With occupier demand remaining polarised towards premium office space, the City prime rent stood at £116.73 per sq ft, up 19% year-on-year, having reached a new record in Q1. Leasing activity at the top end of the City market has remained robust, with 11 transactions above £100 per sq ft recorded so far this year, almost matching the total achieved during the entirety of 2025. In addition, the City Northern Fringe saw a further letting matching the highest rent previously achieved, with Fractile AI acquiring the fifth floor (21,734 sq"
+      },
+      {
+        "number": 2,
+        "source": {
+          "id": "source-96f25db8cb0961d8edfd2b59",
+          "title": "Savills UK | Central London Office Market Watch Q1 2026",
+          "publisher": "www.savills.co.uk",
+          "url": "https://www.savills.co.uk/research_articles/229130/390337-0",
+          "published_at": "2026-05-01",
+          "retrieved_at": "2026-09-10T04:27:02.098129Z",
+          "source_type": "html",
+          "checksum": "c26b5d675353119ca0d3bee81fe79d402666fac434b3084cffa6a0effb0f6454",
+          "demo": false,
+          "submarket": "Midtown / Fringe",
+          "category": "market_pulse",
+          "trusted": true,
+          "canonical_url": "https://www.savills.co.uk/research_articles/229130/390337-0"
+        },
+        "excerpt": "* * * ## City and West End rents * With occupier demand remaining polarised in favour of premium‑quality office space and a number of transactions completing in trophy buildings, the average prime rent for the City rose to £130.80 per sq ft. This was up 40% on Q1 2025 and set a new record rent for the City, with the market seeing a 24% quarter on quarter uplift on Q4’s previous record of £105.26 per sq ft. In addition to this, a new record top rent of £160 per sq ft in the City."
+      },
+      {
+        "number": 3,
+        "source": {
+          "id": "source-130a3ea0562375496b7f0d58",
+          "title": "https://www.knightfrank.co.uk/site-assets/research/report-pdfs/lomr/lomr-q4-2025_final.pdf",
+          "publisher": "www.knightfrank.co.uk",
+          "url": "https://www.knightfrank.co.uk/site-assets/research/report-pdfs/lomr/lomr-q4-2025_final.pdf",
+          "published_at": null,
+          "retrieved_at": "2026-09-10T04:26:14.227065Z",
+          "source_type": "pdf",
+          "checksum": "561b910a28da40b697d6f262a0450b7569f12e0bad3bbc8cb2ef2f9689589030",
+          "demo": false,
+          "submarket": "City",
+          "category": "market_pulse",
+          "trusted": true,
+          "canonical_url": "https://www.knightfrank.co.uk/site-assets/research/report-pdfs/lomr/lomr-q4-2025_final.pdf"
+        },
+        "excerpt": "Prime rents in the City Core increased from £100.00 per sq ft to £102.50 per sq ft, whilst West End Core prime rents moved from £182.50 per sq ft to £185.00 per sq ft. This means that City Core rents have increased by 7.9% over the last 12 months, whilst rents in the West End Core have increased by 15.6%. Looking further ahead, our five-year projection for prime rents has shifted. For the City Core, rents are forecast to grow at an average annual rate of 4.8% 2029 * * * THE LONDON OFFICE MARKET REPORT Q4 2025THE LONDON OFFICE"
+      },
+      {
+        "number": 4,
+        "source": {
+          "id": "source-d56ee7392b0478abe4c7bc7d",
+          "title": "Savills  | Central London Office Market Watch Q2 2026",
+          "publisher": "www.savills.com",
+          "url": "https://www.savills.com/research_articles/255800/393427-0",
+          "published_at": "2026-08-06",
+          "retrieved_at": "2026-09-09T18:39:14.538261Z",
+          "source_type": "html",
+          "checksum": "9c271606da6a87da951437864d805e6c64f54cdec1e9806c95aa03919b9ff919",
+          "demo": false,
+          "submarket": "London",
+          "category": "commentary",
+          "trusted": true,
+          "canonical_url": "https://www.savills.com/research_articles/255800/393427-0"
+        },
+        "excerpt": "* * * ## City and West End rents * With occupier demand remaining polarised towards premium office space, the City prime rent stood at £116.73 per sq ft, up 19% year-on-year, having reached a new record in Q1. Leasing activity at the top end of the City market has remained robust, with 11 transactions above £100 per sq ft recorded so far this year, almost matching the total achieved during the entirety of 2025. In addition, the City Northern Fringe saw a further letting matching the highest rent previously achieved, with Fractile AI acquiring the fifth floor (21,734 sq"
+      },
+      {
+        "number": 5,
+        "source": {
+          "id": "source-50c1b23c56dd9bc1ff7b65b8",
+          "title": "https://www.knightfrank.co.uk/site-assets/research/report-pdfs/lomr/lomr-q2-2026_final.pdf",
+          "publisher": "www.knightfrank.co.uk",
+          "url": "https://www.knightfrank.co.uk/site-assets/research/report-pdfs/lomr/lomr-q2-2026_final.pdf",
+          "published_at": null,
+          "retrieved_at": "2026-09-10T05:32:00.834022Z",
+          "source_type": "pdf",
+          "checksum": "373dbc04b918753b69aa6e438cf6d277971da9ae0f582c2ea165cc3ff73b07a9",
+          "demo": false,
+          "submarket": "London",
+          "category": "commentary",
+          "trusted": true,
+          "canonical_url": "https://www.knightfrank.co.uk/site-assets/research/report-pdfs/lomr/lomr-q2-2026_final.pdf"
+        },
+        "excerpt": "in Q2 reached 3.1m sq ft, up 23.8% from the previous quarter, and 11.1% above the long-term quarterly average. Once again, quality was in focus for occupiers, with new and refurbished take-up accounting for 69.6% of all leasing activity in Q2. The strong leasing performance in Q2 is perhaps more impressive given the relative lack of large transactions. There was just one transaction of 100,000 sq ft or more signed in Q2 (Anthropic’s 158,138 sq ft acquisition at 1 Triton Square, NW1), compared to four in the previous quarter. There was, however, a significant uptick in activity in the 60,000-100,000"
       }
     ],
     "metrics": [],
     "warnings": [
-      "search_web: [Errno 61] Connection refused",
-      "Some evidence is outside the preferred broker, official and developer sources; treat its authority as unconfirmed.",
+      "Omitted claim — A supplementary Savills monthly note (June 2026) reports the average achieved City prime rent year-to-date at £135 per sq ft, up 35% year-on-year, and the average achieved West End prime rent at £183.38 per sq ft, up 5% year-on-year; these are year-to-date achievement averages, not the same metric as the quarterly prime series, so they are not directly comparable with the Q2 quarterly figures.",
+      "Only individually verified claims are shown; the complete synthesis was not verified.",
       "Some sources have no confirmed publication date."
     ],
     "trace": {
-      "run_id": "d3599164-55a7-462a-be32-464b2ae62318",
+      "run_id": "bb06314f-85ad-4cfe-b95c-529b7d55c2e6",
       "intent": "Live London office research",
       "skills": [
         "market_pulse",
@@ -97,17 +219,20 @@
         "macro"
       ],
       "tools": [
+        "search_market_evidence",
+        "search_market_evidence",
+        "search_market_evidence",
+        "search_market_evidence",
         "search_web",
-        "query_market_metrics",
-        "search_web",
-        "query_market_metrics",
+        "scrape_source",
         "search_market_evidence",
         "search_market_evidence",
-        "search_market_evidence",
-        "search_market_evidence",
-        "search_web"
+        "search_market_evidence"
       ],
       "nodes": [
+        "retrieve",
+        "agent",
+        "tools",
         "agent",
         "tools",
         "agent",
@@ -121,70 +246,160 @@
         "agent",
         "verify"
       ],
-      "retrieval_count": 15,
-      "source_count": 1,
-      "duration_ms": 134821.7,
+      "retrieval_count": 32,
+      "source_count": 5,
+      "duration_ms": 105022.8,
       "failures": [
-        "search_web:ConnectError",
-        "search_web:ConnectError",
-        "search_web:ConnectError"
+        "verification:partial_answer"
       ],
       "usage": {
-        "input_tokens": 51001,
-        "output_tokens": 5438
+        "input_tokens": 135092,
+        "output_tokens": 4147
       }
     },
     "demo": false,
-    "insufficient_evidence": false,
+    "insufficient_evidence": true,
     "mode": "live",
     "incomplete": true,
-    "conversation_id": "f9807493-6afa-4e35-bfb1-e6157f7ab6f8",
+    "conversation_id": "56d299a5-26b5-434e-b879-0aa4bff8b6c8",
     "evidence": [
       {
-        "id": "f06fb98e-1eb6-54de-8c1c-25c9945cbc5f",
-        "source_id": "source-37a170e5187eac97d4e9c726",
-        "excerpt": "Take-up reached 2.6 million sq.ft. in Q2 2026 \u2014up 15% quarter-on-quarter and above the 10-year average \u2014led by a strong West End performance.",
+        "id": "a5a8d66e-a2e4-5787-9382-785c5abb5c63",
+        "source_id": "source-89b1d7d78061da0a9899ebee",
+        "excerpt": "* * * ## City and West End rents * With occupier demand remaining polarised towards premium office space, the City prime rent stood at £116.73 per sq ft, up 19% year-on-year, having reached a new record in Q1. Leasing activity at the top end of the City market has remained robust, with 11 transactions above £100 per sq ft recorded so far this year, almost matching the total achieved during the entirety of 2025. In addition, the City Northern Fringe saw a further letting matching the highest rent previously achieved, with Fractile AI acquiring the fifth floor (21,734 sq",
+        "source_title": "Savills UK | Central London Office Market Watch Q2 2026",
         "category": "commentary",
         "submarket": "London",
-        "published_at": null,
+        "published_at": "2026-08-06",
         "source_ids": [],
-        "score": 0.7162293123418568,
-        "location": "paragraph 13"
+        "score": 0.8512568,
+        "location": "paragraph 33",
+        "comparison_role": null,
+        "publisher": "",
+        "reporting_period": null,
+        "observations": [],
+        "material": null,
+        "materiality_reason": ""
       },
       {
-        "id": "6f178a5b-ebc2-58e4-8e6c-4cf14a04cf5a",
-        "source_id": "source-37a170e5187eac97d4e9c726",
-        "excerpt": "Supply contracted for a third consecutive quarter, resulting in a vacancy rate of 8.6% while space under construction was at itslowest level since Q3 2021.",
-        "category": "commentary",
-        "submarket": "London",
-        "published_at": null,
+        "id": "769400dc-2746-5a16-9247-09673f1c8ab0",
+        "source_id": "source-96f25db8cb0961d8edfd2b59",
+        "excerpt": "* * * ## City and West End rents * With occupier demand remaining polarised in favour of premium‑quality office space and a number of transactions completing in trophy buildings, the average prime rent for the City rose to £130.80 per sq ft. This was up 40% on Q1 2025 and set a new record rent for the City, with the market seeing a 24% quarter on quarter uplift on Q4’s previous record of £105.26 per sq ft. In addition to this, a new record top rent of £160 per sq ft in the City.",
+        "source_title": "Savills UK | Central London Office Market Watch Q1 2026",
+        "category": "market_pulse",
+        "submarket": "Midtown / Fringe",
+        "published_at": "2026-05-01",
         "source_ids": [],
-        "score": 0.6394824306972868,
-        "location": "paragraph 15"
+        "score": 0.8643198,
+        "location": "paragraph 32",
+        "comparison_role": null,
+        "publisher": "",
+        "reporting_period": null,
+        "observations": [],
+        "material": null,
+        "materiality_reason": ""
       },
       {
-        "id": "c09b7afa-4fc1-503a-b41b-8f97aacd952d",
-        "source_id": "source-37a170e5187eac97d4e9c726",
-        "excerpt": "Prime rents rose to \u00a3190.00 per sq.ft. in the West End and \u00a395.00 per sq.ft. in the City.",
+        "id": "184b8628-6ca7-55fd-a8dd-10096ebcd7e0",
+        "source_id": "source-89b1d7d78061da0a9899ebee",
+        "excerpt": "* The West End average prime rent at £175.10 per sq ft was up 2.3% on H1 2025, with Softbank’s acquisition of the 1st floor at 77 Grosvenor Street in Q1 at £201 per sq ft remaining the top rent achieved so far this year. Overall, average prime rental growth in the West End is forecast to reach 5.9% in 2026. The highest Q2 West End rent achieved was £182.50 per sq ft, with Strategic Value Partners acquiring the part 2nd floor (8,785 sq ft) at Devonshire House, 1 Mayfair Place, W1.",
+        "source_title": "Savills UK | Central London Office Market Watch Q2 2026",
         "category": "commentary",
         "submarket": "London",
-        "published_at": null,
+        "published_at": "2026-08-06",
         "source_ids": [],
-        "score": 0.7273392582288678,
-        "location": "paragraph 16"
+        "score": 0.85159445,
+        "location": "paragraph 34",
+        "comparison_role": null,
+        "publisher": "",
+        "reporting_period": null,
+        "observations": [],
+        "material": null,
+        "materiality_reason": ""
       },
       {
-        "id": "9b6d81ca-e812-57e4-990a-84b78e2e863c",
-        "source_id": "source-37a170e5187eac97d4e9c726",
-        "excerpt": "Central London Office Market Dynamics | Q2 2026 | JLL Research",
+        "id": "9ffcf383-8716-5eff-b703-5474d5340329",
+        "source_id": "source-130a3ea0562375496b7f0d58",
+        "excerpt": "Prime rents in the City Core increased from £100.00 per sq ft to £102.50 per sq ft, whilst West End Core prime rents moved from £182.50 per sq ft to £185.00 per sq ft. This means that City Core rents have increased by 7.9% over the last 12 months, whilst rents in the West End Core have increased by 15.6%. Looking further ahead, our five-year projection for prime rents has shifted. For the City Core, rents are forecast to grow at an average annual rate of 4.8% 2029 * * * THE LONDON OFFICE MARKET REPORT Q4 2025THE LONDON OFFICE",
+        "source_title": "https://www.knightfrank.co.uk/site-assets/research/report-pdfs/lomr/lomr-q4-2025_final.pdf",
+        "category": "market_pulse",
+        "submarket": "City",
+        "published_at": null,
+        "source_ids": [],
+        "score": 0.8711661,
+        "location": "paragraph 1, words 2201-2300",
+        "comparison_role": null,
+        "publisher": "",
+        "reporting_period": null,
+        "observations": [],
+        "material": null,
+        "materiality_reason": ""
+      },
+      {
+        "id": "7c52e88b-9e20-5fb4-8057-3413b086c047",
+        "source_id": "source-d56ee7392b0478abe4c7bc7d",
+        "excerpt": "* * * ## City and West End rents * With occupier demand remaining polarised towards premium office space, the City prime rent stood at £116.73 per sq ft, up 19% year-on-year, having reached a new record in Q1. Leasing activity at the top end of the City market has remained robust, with 11 transactions above £100 per sq ft recorded so far this year, almost matching the total achieved during the entirety of 2025. In addition, the City Northern Fringe saw a further letting matching the highest rent previously achieved, with Fractile AI acquiring the fifth floor (21,734 sq",
+        "source_title": "Savills  | Central London Office Market Watch Q2 2026",
+        "category": "commentary",
+        "submarket": "London",
+        "published_at": "2026-08-06",
+        "source_ids": [],
+        "score": 0.8512568,
+        "location": "paragraph 32",
+        "comparison_role": null,
+        "publisher": "",
+        "reporting_period": null,
+        "observations": [],
+        "material": null,
+        "materiality_reason": ""
+      },
+      {
+        "id": "source-50c1b23c56dd9bc1ff7b65b8:article:5",
+        "source_id": "source-50c1b23c56dd9bc1ff7b65b8",
+        "excerpt": "in Q2 reached 3.1m sq ft, up 23.8% from the previous quarter, and 11.1% above the long-term quarterly average. Once again, quality was in focus for occupiers, with new and refurbished take-up accounting for 69.6% of all leasing activity in Q2. The strong leasing performance in Q2 is perhaps more impressive given the relative lack of large transactions. There was just one transaction of 100,000 sq ft or more signed in Q2 (Anthropic’s 158,138 sq ft acquisition at 1 Triton Square, NW1), compared to four in the previous quarter. There was, however, a significant uptick in activity in the 60,000-100,000",
+        "source_title": "https://www.knightfrank.co.uk/site-assets/research/report-pdfs/lomr/lomr-q2-2026_final.pdf",
         "category": "commentary",
         "submarket": "London",
         "published_at": null,
         "source_ids": [],
-        "score": 0.6879259470807888,
-        "location": "paragraph 1"
+        "score": 0.0,
+        "location": "Article paragraph 1, words 501-600",
+        "comparison_role": null,
+        "publisher": "",
+        "reporting_period": null,
+        "observations": [],
+        "material": null,
+        "materiality_reason": ""
+      },
+      {
+        "id": "source-50c1b23c56dd9bc1ff7b65b8:article:11",
+        "source_id": "source-50c1b23c56dd9bc1ff7b65b8",
+        "excerpt": "with lease events in 2029 or beyond, suggesting that nearly half of active requirements are much longer-term. AVAILABILITY FALLING Total availability fell by 5.8% in Q2 to 21.6m sq ft, reflecting an overall vacancy rate of 8.0%, just above the long-term average of 7.7%. Vacancy for new space fell from 1.7% to 1.6%, which is 20bps below the long-term trend for London. There was a marginal increase in the vacancy of refurbished space, from 4.3% to 4.4%, which reflects an annual increase of 90bps. The availability of second-hand space contracted to 1.9%, London – Take-up by sector m sq ftLondon",
+        "source_title": "https://www.knightfrank.co.uk/site-assets/research/report-pdfs/lomr/lomr-q2-2026_final.pdf",
+        "category": "commentary",
+        "submarket": "London",
+        "published_at": null,
+        "source_ids": [],
+        "score": 0.0,
+        "location": "Article paragraph 1, words 1101-1200",
+        "comparison_role": null,
+        "publisher": "",
+        "reporting_period": null,
+        "observations": [],
+        "material": null,
+        "materiality_reason": ""
       }
     ],
-    "freshness": "Publication dates unknown"
+    "freshness": "Latest cited publication: 2026-08-06",
+    "conclusion": "Partial brief: individually verified claims",
+    "workflow": "auto",
+    "verdict": null,
+    "gaps": [
+      "Knight Frank's Q2 2026 report was retrieved, but the indexed text does not include its prime rent section or headline rent table, so KF's Q2 2026 City Core and West End Core prime rents could not be verified",
+      "No Q2 2026 prime rent figures from any publisher other than Savills were retrievable, so a true multi-publisher comparison is not possible",
+      "Publisher methodologies differ (average achieved prime rents vs headline/core quoting rents), limiting like-for-like comparability even where figures exist across periods",
+      "No verdict-style hypothesis was tested; this is a factual comparison constrained by coverage",
+      "Some claims failed citation checks and were omitted. The remaining claims do not establish an overall conclusion."
+    ]
   }
 }

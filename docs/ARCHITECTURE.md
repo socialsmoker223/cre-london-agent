@@ -1,9 +1,15 @@
 # Live research architecture
 
+For setup and the user workflow, see [README](../README.md). The
+[six-slide executive narrative](SLIDES.md) summarizes the same system for business reviewers.
+
+Sources → Retrieve/Filter → Compare/Reason → Verify → Cited Brief describes the logical flow.
+The actual graph can loop through retrieval and tools before verification, as described below.
+
 ## Contracts
 
 `models.py` owns all typed contracts. `Settings.from_env()` loads .env without overriding
-exported variables and requires LLM_PROVIDER (z.ai or openai), its API_KEY/API_BASE variables and LLM_MODEL.
+exported variables and requires LLM_PROVIDER (z.ai or openai), its API_KEY/API_BASE variables, LLM_MODEL and CRAWL4AI_API_TOKEN.
 `MarketService(data_dir=None)` constructs the configured provider, remote Qdrant retrieval
 and WebResearchClient. SQLite lives in data_dir/live. There is no demo/offline runtime or
 provider injection at the service boundary. Legacy synthetic sources are excluded.
@@ -37,7 +43,7 @@ Metrics from previous versions of the same URL are superseded in queries, not er
 
 Public service: chat(ChatRequest)->ChatResponse; sources(); metrics(MetricQuery);
 ingest(IngestRequest); refresh(RefreshRequest)->RefreshResult;
-latest_refresh()->RefreshResult|None; status()->dict; close().
+latest_refresh()->RefreshResult|None; remove_source(source_id)->bool; status()->dict; close().
 GET /api/status exposes refresh progress and provider/model; GET /api/refresh exposes the saved briefing; POST /api/refresh runs
 a bounded synchronous refresh. Chat retains JSON response and adds mode/incomplete/evidence/
 conversation_id/freshness. UI continues the prior conversation by default after a successful answer, never puts secrets in responses.
@@ -109,7 +115,7 @@ Text comparisons pair stored previous/current excerpts, keeping publication and 
 separate. Reporting-period text windows use publication quarters, not inferred observation dates;
 undated publications are excluded from these windows but included in ingestion comparisons.
 Historical document versions remain available for the preceding publication quarter. Each window
-is bounded to 12 documents and 5,000 characters per document, with explicit coverage warnings.
+is bounded to 12 documents and 18,000 characters per document, with explicit coverage warnings.
 The model must check event dates, geography and independent reporting before interpreting signals.
 Strengthened/weakened risks require citations to both windows; silence does not mean weakening.
 Emerging themes require multiple current publishers; repeated chunks and syndicated reports do not
@@ -121,7 +127,7 @@ and retains up to 30 `identified_signals` hypotheses for later reassessment, inc
 unchanged refreshes. First collection establishes a baseline without claiming text signal changes.
 Analysis failures preserve numerical results and mark the refresh incomplete. Saved briefing text
 and chat responses prioritize movements and changed signals over a full market-state recap.
-No new dependencies or storage tables are required; existing refresh JSON accepts the added fields.
+Refresh JSON stores these fields alongside numerical results.
 
 
 ## Business output and investigation
@@ -135,14 +141,14 @@ availability, Grade A/secondary vacancy, completions, future pipeline and prelet
 quoted extraction still applies. Definitions describe series, not their current value or date.
 
 ResearchAnswer and ChatResponse expose a hypothesis verdict, evidence gaps, and sectioned claims:
-what_changed, key_metrics, emerging_signals, risks, opportunities, watchlist and disagreements.
+summary, what_changed, key_metrics, emerging_signals, risks, opportunities, watchlist and disagreements.
 Every claim retains evidence IDs through to the dashboard. Structured evidence carries original
 observations (including definition, reporting period and quotation) beside deterministic results.
 The verifier checks factual numbers against quoted source content and requires calculated numbers
 in calculation excerpts. Implications and watchlists must be interpretations. Disagreement claims
 must retain both sources. A cited historical observation never clears an insufficient forecast
 verdict. After one repair, a partly valid answer retains only claims that individually pass all checks,
-with incomplete status and an insufficient verdict; the rejected conclusion is discarded.
+with incomplete status and an insufficient verdict when an investigation verdict applies; the rejected conclusion is discarded.
 If no claims survive, the response returns source excerpts with an explicit insufficiency notice.
 These checks enforce provenance and output contracts, not full semantic entailment or causality.
 
@@ -157,10 +163,23 @@ and new evidence; ties use newest publication and then distinct publishers. The 
 evidence IDs are returned by the tool. Publisher counts do not prove independence. Below-threshold
 movements remain accessible for investigation. No opaque model materiality score is introduced.
 
-The first briefing section contains at most five developments. Remaining sections and per-claim
+The opening summary precedes the findings; the what_changed section contains at most five
+developments. Remaining sections and per-claim
 verification are expandable; key metrics and disagreements are expanded. Missing sections are not
 filled with invented claims. Copy includes the numbered source list. Conversation memory retains
 three complete turns and the current answer's cited evidence; sessions remain bounded and volatile.
+
+Generated briefs lead with an “In brief” summary: up to two cited claims and 80 words, using
+section=summary in the existing claim contract. The summary passes the same number, publisher
+and evidence checks as detailed claims, appears before detailed sections in the dashboard and
+copied/CLI text, and is discarded if the complete synthesis fails verification. Partial answers
+show a scope limitation instead of retaining a potentially misleading executive conclusion.
+
+If the provider omits its summary or repeats a detail verbatim, one bounded model call writes
+a distinct synthesis from the verified findings and their evidence. It uses the remaining research
+budget (at most 30 seconds), passes the existing citation/number checks and rejects copied details.
+Failures leave the verified details intact with a summary-unavailable warning; no detail is promoted
+into a summary. Verification failures never receive this synthesis step.
 
 Offline smoke and eval are repository test entry points requiring the dev dependencies, explicitly
 separate from the live-only application. Live eval runs the six product scenarios and optionally
@@ -213,16 +232,3 @@ continues using the server default. z.ai and one OpenAI-compatible endpoint are 
 existing SDK. Configure the secondary provider with ZAI_MODEL or OPENAI_MODEL plus the matching
 API_KEY/API_BASE environment variables; the primary uses LLM_MODEL. Endpoints must support
 chat completions, tool calls and JSON object responses. Choices last for the current page session.
-
-
-Generated briefs lead with an “In brief” summary: up to two cited claims and 80 words, using
-section=summary in the existing claim contract. The summary passes the same number, publisher
-and evidence checks as detailed claims, appears before detailed sections in the dashboard and
-copied/CLI text, and is discarded if the complete synthesis fails verification. Partial answers
-show a scope limitation instead of retaining a potentially misleading executive conclusion.
-
-If the provider omits its summary or repeats a detail verbatim, one bounded model call writes
-a distinct synthesis from the verified findings and their evidence. It uses the remaining research
-budget (at most 30 seconds), passes the existing citation/number checks and rejects copied details.
-Failures leave the verified details intact with a summary-unavailable warning; no detail is promoted
-into a summary. Verification failures never receive this synthesis step.

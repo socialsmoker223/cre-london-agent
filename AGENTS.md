@@ -18,7 +18,7 @@ Use Python 3.12+ and project-local dependencies managed by `uv`.
 - `uv run london-monitor refresh` — crawl and ingest documents (baseline or incremental).
 - `docker build -t london-monitor .` — build the container.
 - `docker compose up` — run app, Qdrant, and crawl4ai together; requires `LLM_PROVIDER`, `LLM_MODEL`,
-  `ZAI_API_KEY`, `ZAI_API_BASE`, and `CRAWL4AI_API_TOKEN` exported in the shell.
+  the selected provider's API key/base, and `CRAWL4AI_API_TOKEN` in `.env` or the shell.
 
 ## Coding Style & Naming Conventions
 
@@ -34,4 +34,9 @@ The existing history uses `feat(agent): ...`; follow that scoped Conventional Co
 
 ## Configuration & Data Integrity
 
-Keep credentials and `.runtime/` untracked. Export configuration in the shell; `.env` is not automatically loaded. Set `LONDON_DATA_DIR` for isolated storage, and stop the server before CLI commands share that directory: local Qdrant requires one owner. Preserve synthetic-data labels and source citations; SQLite remains authoritative for numerical metrics.
+Keep credentials and `.runtime/` untracked. `.env` loads automatically; exported variables take
+precedence. The live service uses remote Qdrant. `LONDON_DATA_DIR` isolates SQLite, not the remote
+vector collection; use a separate Qdrant dataset for fully isolated runs. Use one app process and
+stop it before CLI operations on the same dataset. Synthetic sources are rejected by the live
+service; offline smoke/eval use explicit test fixtures. Preserve source citations and definitions;
+SQLite remains authoritative for numerical metrics.
