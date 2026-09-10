@@ -8,8 +8,8 @@ class ProviderUnavailable(RuntimeError):
     """Safe, user-facing provider failure; never substitute another provider."""
 
 
-class ZaiProvider:
-    """OpenAI-compatible z.ai provider for the live research graph."""
+class OpenAICompatibleProvider:
+    """Configured OpenAI-compatible provider for the live research graph."""
 
     def __init__(self, settings: Settings | None = None) -> None:
         settings = settings or Settings.from_env()
@@ -20,6 +20,7 @@ class ZaiProvider:
             max_retries=0,
         )
         self.model = settings.model
+        self.name = settings.provider
 
     def complete(self, messages: list[dict], tools: list[dict], timeout: float) -> ModelTurn:
         if timeout <= 0:
@@ -29,24 +30,24 @@ class ZaiProvider:
                 model=self.model,
                 messages=messages,
                 tools=tools or None,
-                reasoning_effort="low",
+                **({"reasoning_effort": "low"} if self.name == "z.ai" else {}),
                 response_format={"type": "json_object"},
                 max_tokens=8192,
                 timeout=min(float(timeout), 120),
             )
         except AuthenticationError as exc:
             raise ProviderUnavailable(
-                "The configured z.ai key was rejected. Check ZAI_API_KEY."
+                "The selected provider key was rejected. Check the server credentials."
             ) from exc
         except APITimeoutError as exc:
             raise ProviderUnavailable("The configured model timed out. Please retry.") from exc
         except RateLimitError as exc:
             raise ProviderUnavailable(
-                "The configured z.ai account is rate limited. Retry later."
+                "The selected provider account is rate limited. Retry later."
             ) from exc
         except OpenAIError as exc:
             raise ProviderUnavailable(
-                "The configured z.ai model is unavailable. Check the endpoint and model settings."
+                "The selected model is unavailable. Check the endpoint and model settings."
             ) from exc
         message = result.choices[0].message
         calls = []

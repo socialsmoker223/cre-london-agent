@@ -4,6 +4,7 @@ import re
 import time
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable
+from copy import copy
 from decimal import Decimal
 from itertools import combinations
 from pathlib import Path
@@ -25,6 +26,7 @@ from london_monitor.models import (
     ScrapeQuery,
     Source,
 )
+from london_monitor.provider import ProviderUnavailable
 
 LOG = logging.getLogger(__name__)
 
@@ -32,12 +34,20 @@ LOG = logging.getLogger(__name__)
 class MarketService:
     def __init__(self, data_dir: Path | None = None):
         from london_monitor.db import Database
-        from london_monitor.provider import ZaiProvider
+        from london_monitor.provider import OpenAICompatibleProvider
         from london_monitor.retrieval import VectorIndex
         from london_monitor.web_access import WebResearchClient
 
         settings = Settings.from_env()
-        self.provider = ZaiProvider(settings)
+        self.provider = OpenAICompatibleProvider(settings)
+        self.providers = {settings.provider: self.provider}
+        for name in ("z.ai", "openai"):
+            if name == settings.provider:
+                continue
+            try:
+                self.providers[name] = OpenAICompatibleProvider(Settings.from_env(name))
+            except ValueError:
+                pass
         self.data_dir = Path(data_dir or settings.data_dir) / "live"
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.store = Database(self.data_dir / "market.sqlite")
@@ -45,6 +55,7 @@ class MarketService:
         self.refresh_lock = Lock()
         self.refresh_progress = None
         self.conversations = OrderedDict()
+        self.source_revision = 0
         try:
             self.retriever = VectorIndex(
                 url=settings.qdrant_url, cache_dir=settings.embedding_cache
@@ -64,11 +75,24 @@ class MarketService:
         request = request.model_copy(update={"conversation_id": session_id})
         with self.lock:
             history, evidence = self.conversations.get(session_id, ([], {}))
+            source_revision = getattr(self, "source_revision", 0)
         transcript = []
         refs = {}
-        response = run_graph(self.graph, request, history, evidence, transcript, refs, emit)
+        graph = self.graph
+        if request.provider or request.model:
+            name = request.provider or self.provider.name
+            if name not in self.providers:
+                raise ProviderUnavailable("This provider is not configured on the server.")
+            provider = copy(self.providers[name])
+            provider.model = request.model or provider.model
+            selected = copy(self)
+            selected.provider = provider
+            graph = build_graph(selected, provider)
+        response = run_graph(graph, request, history, evidence, transcript, refs, emit)
         response.conversation_id = session_id
         with self.lock:
+            if source_revision != getattr(self, "source_revision", 0):
+                raise ProviderUnavailable("Sources changed during research. Please ask again.")
             # ponytail: three complete turns in memory; persist sessions for longer investigations.
             messages = [*history, *transcript]
             if (
@@ -111,7 +135,26 @@ class MarketService:
 
         if request.demo:
             raise ValueError("Synthetic sources are not accepted")
-        return ingest(request, self.store, self.retriever)
+        with self.lock:
+            return ingest(request, self.store, self.retriever)
+
+    def remove_source(self, source_id: str) -> bool:
+        if not self.refresh_lock.acquire(blocking=False):
+            raise ValueError("Wait for the current refresh to finish before removing a source.")
+        try:
+            with self.lock:
+                source = next((s for s in self.sources() if s.id == source_id), None)
+                if source is None:
+                    return False
+                versions = [s.id for s in self.sources() if s.id == source_id or
+                            (source.canonical_url and s.canonical_url == source.canonical_url)]
+                self.retriever.remove_sources(versions)
+                self.store.remove_sources(versions, source.canonical_url or source.id)
+                self.source_revision = getattr(self, "source_revision", 0) + 1
+                self.conversations.clear()
+                return True
+        finally:
+            self.refresh_lock.release()
 
     def collect(self, query: ScrapeQuery, deadline: float, *, with_metrics: bool = True):
         from london_monitor.ingestion import article_text
@@ -237,7 +280,9 @@ class MarketService:
     def status(self):
         return {
             "mode": "live",
-            "provider": "z.ai",
+            "provider": self.provider.name,
+            "providers": [{"id": name, "model": provider.model}
+                          for name, provider in self.providers.items()],
             "sources": len(self.sources()),
             "last_refresh": self.latest_refresh(),
             "model": self.provider.model,

@@ -105,6 +105,8 @@ def ingest(request: IngestRequest, store: Store, retriever: Retriever) -> Ingest
         source_type=request.source_type,
         canonical_url=canonical,
     )
+    if store.source_removed(source.canonical_url or source.id):
+        raise ValueError("This source was removed from the library.")
     chunks = retriever.index(source, text, request.submarket, request.category)
     # A fresh crawl must not erase observations still quoted verbatim in the new version.
     prior_ids = {s.id for s in sources if canonical and s.canonical_url == canonical}

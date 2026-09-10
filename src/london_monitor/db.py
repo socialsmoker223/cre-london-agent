@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS projects (
  source_id TEXT NOT NULL REFERENCES sources(id), UNIQUE(name,submarket,completion_date,source_id));
 CREATE TABLE IF NOT EXISTS documents (
  source_id TEXT PRIMARY KEY REFERENCES sources(id), text TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS removed_sources (identity TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS refreshes (run_id TEXT PRIMARY KEY, payload TEXT NOT NULL,
  completed_at TEXT NOT NULL, status TEXT NOT NULL);""")
             self._migrate_columns()
@@ -125,6 +126,27 @@ CREATE TABLE IF NOT EXISTS refreshes (run_id TEXT PRIMARY KEY, payload TEXT NOT 
                     (source.published_at.isoformat(), source.id),
                 )
             return inserted
+
+    def source_removed(self, identity: str) -> bool:
+        with self._lock:
+            return self.connection.execute(
+                "SELECT 1 FROM removed_sources WHERE identity=?", (identity,)
+            ).fetchone() is not None
+
+    def remove_sources(self, source_ids: list[str], identity: str) -> None:
+        with self._lock, self.connection:
+            for table in ("metrics", "projects", "documents"):
+                self.connection.executemany(
+                    f"DELETE FROM {table} WHERE source_id=?", [(sid,) for sid in source_ids]
+                )
+            self.connection.executemany(
+                "DELETE FROM sources WHERE id=?", [(sid,) for sid in source_ids]
+            )
+            self.connection.execute(
+                "INSERT OR IGNORE INTO removed_sources VALUES (?)", (identity,)
+            )
+            # Saved briefs contain removed excerpts and stale comparison baselines.
+            self.connection.execute("DELETE FROM refreshes")
 
     def list_sources(self) -> list[Source]:
         with self._lock:

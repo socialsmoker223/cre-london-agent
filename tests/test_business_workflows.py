@@ -251,6 +251,8 @@ def test_failed_claim_is_omitted_without_losing_verified_business_evidence(tmp_p
                     evidence_ids=[ref.id]),
         AnswerClaim(text='City rent will reach £999 psf.', evidence_ids=[ref.id]),
         AnswerClaim(text='Verdict: Supported.', evidence_ids=[ref.id]),
+        AnswerClaim(text='City rents suggest a strong outlook.', section='summary',
+                    kind='interpretation', evidence_ids=[ref.id]),
     ])
     provider = SimpleNamespace(complete=lambda *args, **kwargs:
                                ModelTurn(content=candidate.model_dump_json()))
@@ -263,6 +265,7 @@ def test_failed_claim_is_omitted_without_losing_verified_business_evidence(tmp_p
         assert len(response.claims) == len(response.citations) == 1
         assert response.claims[0].text == 'City rent is £95 psf. This could signal pressure.'
         assert response.claims[0].kind == 'interpretation'
+        assert response.summary == []
         assert '999' not in response.answer
         assert response.trace.failures == ['verification:partial_answer']
     finally:
@@ -282,6 +285,9 @@ def test_article_body_reaches_metrics_and_comparison_beyond_navigation(tmp_path)
     document = 'Navigation link\n' * 2500 + body + '\n\nAuthors\nContact details'
     assert article_text(document) == body
     service = MarketService.__new__(MarketService)
+    from threading import RLock
+
+    service.lock = RLock()
     service.store = Database(tmp_path / 'article.sqlite')
     source = Source(id='report', title='Office Market Q2 2026', publisher='Broker',
                     checksum='article', published_at=date(2026, 8, 6))
@@ -314,5 +320,51 @@ def test_article_body_reaches_metrics_and_comparison_beyond_navigation(tmp_path)
                                      time.monotonic() + 10, with_metrics=False)
         assert quote in ' '.join(e.excerpt for e in scraped)
         assert all('Navigation link' not in e.excerpt for e in scraped)
+    finally:
+        service.store.close()
+
+
+def test_executive_summary_is_cited_verified_and_precedes_detail(tmp_path):
+    from london_monitor.agent.graph import run_graph
+
+    service = MarketService.__new__(MarketService)
+    service.store = Database(tmp_path / 'summary.sqlite')
+    source = Source(id='report', title='Report', publisher='Test', checksum='summary')
+    ref = Evidence(id='report:1', source_id=source.id, excerpt='City rent is £95 psf.',
+                   category='rents', submarket='City')
+    service.store.save_document(source, ref.excerpt)
+    service.retriever = SimpleNamespace(search=lambda query: [ref])
+    summary = AnswerClaim(text='City rent is £95 psf. Broader market direction remains uncertain.',
+                          section='summary', kind='interpretation', evidence_ids=[ref.id])
+    candidate = ResearchAnswer(conclusion='City rental evidence', claims=[
+        AnswerClaim(text=ref.excerpt, evidence_ids=[ref.id]), summary,
+    ])
+    provider = SimpleNamespace(complete=lambda *args, **kwargs:
+                               ModelTurn(content=candidate.model_dump_json()))
+    try:
+        response = run_graph(build_graph(service, provider), ChatRequest(question='City rents'))
+        assert response.answer.index('In brief') < response.answer.index('Key Metrics')
+        assert summary.text + ' [1]' in response.answer
+        assert not response.incomplete
+        assert response.summary[0].text == summary.text
+        candidate.claims = candidate.claims[:1]  # Provider omitted the requested summary.
+        turns = iter([candidate, ResearchAnswer(claims=[summary])])
+        provider.complete = lambda *args, **kwargs: ModelTurn(content=next(turns).model_dump_json())
+        repaired = run_graph(build_graph(service, provider), ChatRequest(question='City rents'))
+        assert repaired.summary[0].text == summary.text
+        assert repaired.answer.index('In brief') < repaired.answer.index('Key Metrics')
+        # A copied detail is rejected instead of being promoted into an opening summary.
+        duplicate = candidate.claims[0].model_copy(update={'section': 'summary'})
+        for invalid_summary in (
+            duplicate, summary.model_copy(update={'text': 'Rent is £999 psf.'})
+        ):
+            turns = iter([candidate, ResearchAnswer(claims=[invalid_summary])])
+            rejected = run_graph(build_graph(service, provider), ChatRequest(question='City rents'))
+            assert rejected.summary == []
+            assert rejected.claims[0].text == ref.excerpt
+            assert any('opening synthesis' in warning for warning in rejected.warnings)
+        for text in ('City rent is £999 psf.', 'word ' * 81):
+            invalid = summary.model_copy(update={'text': text})
+            assert validate_answer(ResearchAnswer(claims=[invalid]), {ref.id: ref})
     finally:
         service.store.close()

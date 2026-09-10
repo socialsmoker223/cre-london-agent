@@ -12,7 +12,7 @@ Skill = Literal["market_pulse", "comparison", "supply", "macro", "evidence", "me
 ChangeStatus = Literal["new", "strengthened", "weakened", "contradictory", "emerging"]
 Workflow = Literal["auto", "monitor", "investigate", "prepare"]
 Section = Literal[
-    "what_changed", "key_metrics", "emerging_signals", "risks", "opportunities",
+    "summary", "what_changed", "key_metrics", "emerging_signals", "risks", "opportunities",
     "watchlist", "disagreements",
 ]
 Verdict = Literal["Supported", "Partially supported", "Not supported", "Insufficient evidence"]
@@ -128,6 +128,8 @@ class ChatRequest(Model):
     previous_question: str | None = Field(default=None, max_length=2000)
     conversation_id: str | None = Field(default=None, max_length=64)
     workflow: Workflow = "auto"
+    provider: Literal["z.ai", "openai"] | None = None
+    model: str | None = Field(default=None, min_length=1, max_length=200, pattern=r"^\S+$")
 
 
 class Citation(Model):
@@ -161,6 +163,7 @@ class Trace(Model):
 class ChatResponse(Model):
     answer: str
     claims: list[Claim]
+    summary: list[Claim] = Field(default_factory=list)
     citations: list[Citation]
     metrics: list[Metric]
     warnings: list[str]
@@ -179,6 +182,8 @@ class ChatResponse(Model):
 
 
 class Store(Protocol):
+    def source_removed(self, identity: str) -> bool: ...
+
     def add_source(self, source: Source) -> bool: ...
     def list_sources(self) -> list[Source]: ...
     def add_metrics(self, metrics: list[Metric]) -> None: ...

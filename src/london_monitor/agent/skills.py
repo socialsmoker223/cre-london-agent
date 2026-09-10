@@ -102,7 +102,16 @@ conclusion is a short non-numerical heading (e.g. 'Prime rents diverge across su
 claims is a list of {text,kind,evidence_ids,section}, kind fact/calculation/interpretation.
 Do not number claim text; the application adds numbering. Use change_status only for a qualitative
 signal comparison, with the required previous/current references, not for ordinary reported metrics.
-section is what_changed/key_metrics/emerging_signals/risks/opportunities/watchlist/disagreements.
+section is summary/what_changed/key_metrics/emerging_signals/risks/opportunities/watchlist/
+disagreements.
+Begin every supported answer with section=summary: one or two cited claims forming a short
+2–3 sentence executive brief (at most 80 words total). Answer the user's question directly,
+explain the main takeaway and its practical meaning, and state the most important uncertainty.
+Connect multiple findings into a direct answer; do not copy or paraphrase one detailed claim.
+Synthesize the findings rather than listing metrics or repeating section headings. Use
+interpretation for synthesis and attach the evidence IDs supporting every part of the summary.
+Keep detailed figures and supporting analysis in the sections below. If evidence cannot support
+a conclusion, say so plainly; do not manufacture a positive takeaway.
 Risks, opportunities and watchlist must be interpretations. Do not invent claims to fill a section.
 Disagreements must contrast evidence from at least two source IDs and cite both. Missing coverage
 is an evidence gap, not a disagreement claim; one report’s counterevidence belongs in key_metrics.

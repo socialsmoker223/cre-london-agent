@@ -141,6 +141,16 @@ class VectorIndex(Retriever):
                     )
         return len(points)
 
+    def remove_sources(self, source_ids: list[str]) -> None:
+        with self._lock:
+            self._client.delete(
+                collection_name=self._collection,
+                points_selector=models.FilterSelector(filter=models.Filter(must=[
+                    models.FieldCondition(key="source_id", match=models.MatchAny(any=source_ids))
+                ])),
+                wait=True,
+            )
+
     def search(self, query: SearchQuery) -> list[Evidence]:
         must = []
         if query.category:

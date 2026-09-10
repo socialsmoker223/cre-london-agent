@@ -91,6 +91,9 @@ def validate_answer(
     answer: ResearchAnswer, evidence: dict[str, Evidence], request: ChatRequest | None = None
 ) -> list[str]:
     errors = []
+    summary = [c for c in answer.claims if c.section == "summary"]
+    if len(summary) > 2 or sum(len(c.text.split()) for c in summary) > 80:
+        errors.append("Keep the opening summary to one or two claims and at most 80 words")
     for claim in answer.claims:
         if any(i not in evidence for i in claim.evidence_ids):
             errors.append("Unknown evidence ID")
@@ -524,7 +527,9 @@ def build_graph(service, provider: AgentProvider):
             )
             for claim in candidate.claims:
                 # A failed synthesis cannot retain its verdict disguised as an individual claim.
-                if re.search(r"\bverdict\b|\boverall conclusion\b", claim.text, re.I):
+                if claim.section == "summary" or re.search(
+                    r"\bverdict\b|\boverall conclusion\b", claim.text, re.I
+                ):
                     continue
                 check = partial.model_copy(deep=True, update={"claims": [claim]})
                 if not validate_answer(check, evidence, state["request"]):
@@ -560,6 +565,53 @@ def build_graph(service, provider: AgentProvider):
         ):
             state["incomplete"] = True
             state["warnings"].append("No live search completed; this answer uses stored evidence.")
+        verification_failed = any(f.startswith("verification:") for f in state["trace"].failures)
+        if answer.claims and not verification_failed:
+            progress(state, "Writing a concise synthesis of the verified findings")
+            details = [c for c in answer.claims if c.section != "summary"]
+            detail_texts = {" ".join(c.text.lower().split()) for c in details}
+            opening = [c for c in answer.claims if c.section == "summary"
+                       and " ".join(c.text.lower().split()) not in detail_texts]
+            if not opening:
+                try:
+                    remaining = state["deadline"] - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError("Research deadline reached")
+                    refs = {i: evidence[i] for c in details for i in c.evidence_ids}
+                    turn = provider.complete([
+                        {"role": "system", "content": SKILLS},
+                        {"role": "user", "content": (
+                            "Write ONLY the executive summary of this verified brief as "
+                            "ResearchAnswer JSON with one or two claims, section=summary, "
+                            "kind=interpretation. Use 2–3 sentences and at most 80 words. "
+                            "Directly answer the question, connect the main findings, explain "
+                            "their implication and most important limitation. Do not copy or "
+                            "paraphrase a single detail as the summary. No new research, figures "
+                            "or assertions. Cite the evidence IDs for the findings you synthesize. "
+                            "Question: " + state["request"].question
+                            + " Conversation questions: " + json.dumps([
+                                m["content"] for m in state["messages"] if m["role"] == "user"
+                            ])
+                            + " Verified brief: " + answer.model_dump_json()
+                            + " Evidence: " + json.dumps([e.model_dump(mode="json")
+                                                           for e in refs.values()])
+                        )},
+                    ], [], timeout=min(remaining, 30))
+                    for key, value in turn.usage.items():
+                        state["trace"].usage[key] = state["trace"].usage.get(key, 0) + value
+                    synthesis = ResearchAnswer.model_validate_json(turn.content)
+                    if (not synthesis.claims
+                            or any(c.section != "summary" for c in synthesis.claims)
+                            or validate_answer(synthesis, refs)
+                            or any(" ".join(c.text.lower().split()) in detail_texts
+                                   for c in synthesis.claims)):
+                        raise ValueError("Summary must be a distinct, cited synthesis")
+                    opening = synthesis.claims
+                except Exception:
+                    state["warnings"].append(
+                        "The opening synthesis was unavailable; verified details are retained."
+                    )
+            answer.claims = [*opening, *details]
         used = list(dict.fromkeys(i for c in answer.claims for i in c.evidence_ids))
         source_ids = list(
             dict.fromkeys(
@@ -596,9 +648,15 @@ def build_graph(service, provider: AgentProvider):
             )
             for c in answer.claims
         ]
+        summary = [c for c in claims if c.section == "summary"]
         body = answer.conclusion
         if answer.verdict:
             body += f"\nVerdict: {answer.verdict}"
+        if summary:
+            body += "\n\nIn brief\n" + "\n".join(
+                c.text + " " + " ".join(f"[{source_ids.index(s) + 1}]" for s in c.source_ids)
+                for c in summary
+            )
         for section in ("what_changed", "key_metrics", "emerging_signals", "risks",
                         "opportunities", "watchlist", "disagreements"):
             selected = [c for c in claims if c.section == section]
@@ -631,6 +689,7 @@ def build_graph(service, provider: AgentProvider):
         response = ChatResponse(
             answer=body.strip(),
             claims=claims,
+            summary=summary,
             citations=citations,
             metrics=state["metrics"],
             warnings=list(dict.fromkeys(state["warnings"])),

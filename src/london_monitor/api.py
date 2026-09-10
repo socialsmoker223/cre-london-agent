@@ -121,6 +121,19 @@ def create_app(service: Any | None = None) -> FastAPI:
         except Exception as exc:
             raise _service_error() from exc
 
+    @app.delete("/api/sources/{source_id}")
+    def remove_source(source_id: str, request: Request):
+        try:
+            if not request.app.state.service.remove_source(source_id):
+                raise HTTPException(status_code=404, detail="Source not found.")
+            return {"removed": True}
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise _service_error() from exc
+
     @app.post("/api/ingest", response_model=IngestResult)
     def ingest(payload: IngestRequest, request: Request) -> IngestResult:
         try:

@@ -10,6 +10,8 @@ let refreshTimer = null;
 let refreshPending = false;
 let chatController = null;
 let workflow = 'auto';
+let providerOptions = [];
+let removingSource = null;
 context.disabled = true;
 
 document.querySelectorAll('.examples button:not(#new-research), .workflows button').forEach((button) => button.addEventListener('click', () => {
@@ -44,7 +46,7 @@ function cell(row, value, tag = 'td') {
 }
 
 function sourceLink(parent, source) {
-  if (!source?.url) return text(parent, source?.publisher || 'Unknown source');
+  if (!source?.url) return text(parent, source?.title || source?.publisher || 'Unknown source');
   const link = text(parent, source.title, 'a');
   link.href = source.url;
   link.target = '_blank';
@@ -67,23 +69,27 @@ function renderAnswer(data, askedQuestion) {
   const verificationFailed = (data.trace?.failures || []).some(failure => failure.startsWith('verification:'));
   text(answer, fallback ? 'Source evidence' : data.conclusion || 'Market brief', 'h2');
   if (data.verdict) text(answer, verificationFailed ? 'Overall conclusion unavailable' : data.verdict, 'p').className = 'verdict';
+  if (verificationFailed && !fallback) text(answer, 'Some findings were verified, but an overall conclusion is unavailable. Review the supported points and evidence gaps below.', 'p').className = 'summary-limitation';
   if (fallback) text(answer, 'A verified synthesis is unavailable. Review the cited source excerpts below.', 'p');
   if (!data.claims.length) text(answer, data.answer, 'p').className = 'answer-body';
   const sections = {
-    what_changed: 'What changed', key_metrics: 'Key metrics', emerging_signals: 'Emerging signals',
+    summary: 'In brief', what_changed: 'What changed', key_metrics: 'Key metrics', emerging_signals: 'Emerging signals',
     risks: 'Risks to investigate', opportunities: 'Opportunities to investigate',
     watchlist: 'Watchlist', disagreements: 'Where sources disagree',
   };
   Object.entries(sections).forEach(([key, title]) => {
-    const claims = data.claims.filter(claim => (claim.section || 'key_metrics') === key);
+    const claims = key === 'summary' ? (data.summary || [])
+      : data.claims.filter(claim => (claim.section || 'key_metrics') === key);
     if (!claims.length) return;
-    const section = document.createElement(key === 'what_changed' ? 'section' : 'details');
-    section.className = 'brief-section';
+    const isSummary = key === 'summary';
+    const expanded = isSummary || key === 'what_changed';
+    const section = document.createElement(expanded ? 'section' : 'details');
+    section.className = isSummary ? 'brief-section executive-summary' : 'brief-section';
     if (key === 'key_metrics' || key === 'disagreements') section.open = true;
-    text(section, title, key === 'what_changed' ? 'h3' : 'summary');
-    const list = document.createElement('ol');
+    text(section, title, expanded ? 'h3' : 'summary');
+    const list = document.createElement(isSummary ? 'div' : 'ol');
     claims.forEach((claim) => {
-      const item = document.createElement('li');
+      const item = document.createElement(isSummary ? 'div' : 'li');
       text(item, claim.kind === 'calculation' ? 'Fact · calculated' : claim.kind === 'interpretation' ? 'Interpretation' : 'Fact', 'small').className = 'claim-kind';
       text(item, claim.text, 'p');
       const evidence = document.createElement('details');
@@ -280,6 +286,10 @@ form.addEventListener('submit', async (event) => {
   const timer = setInterval(updateStatus, 1000);
   try {
     const payload = { question: value, workflow };
+    if (providerOptions.length) {
+      payload.provider = $('#llm-provider').value;
+      payload.model = $('#llm-model').value.trim();
+    }
     if (context.checked && previousQuestion) payload.previous_question = previousQuestion;
     if (context.checked && conversationId) payload.conversation_id = conversationId;
     const result = await streamChat(payload, chatController.signal, message => {
@@ -357,20 +367,35 @@ async function loadMetrics() {
     const container = $('#metrics');
     container.replaceChildren();
     if (metrics.length) container.append(table);
-    else text(container, 'No structured observations are available for the current source versions. Reports may contain figures that could not be validated with an explicit period, geography and unit; inspect the collected sources below.');
+    else text(container, 'No structured observations are available for the current source versions. Reports may contain figures that could not be validated with an explicit period, geography and unit; inspect the source library.');
     const library = $('#sources');
     library.replaceChildren();
     const list = Object.values(sources);
-    text(library, `Collected sources (${list.length})`, 'summary');
+    $('#source-count').textContent = list.length;
+    if (!list.length) text(library, 'No sources yet. Ask a question or refresh data to collect research.', 'p');
     list.forEach(source => {
-      const item = document.createElement('p');
-      sourceLink(item, source);
-      text(item, ` · ${source.publisher} · Published ${source.published_at || 'date unknown'}`);
+      const item = document.createElement('article');
+      item.className = 'source-item';
+      const info = document.createElement('div');
+      sourceLink(info, source);
+      text(info, `${source.publisher} · ${source.published_at || 'Date unknown'}`, 'small');
+      const remove = text(item, '×', 'button');
+      remove.type = 'button';
+      remove.className = 'remove-source';
+      remove.setAttribute('aria-label', `Remove ${source.title}`);
+      remove.title = 'Remove source';
+      remove.addEventListener('click', () => {
+        removingSource = source;
+        $('#remove-description').textContent = source.title;
+        $('#remove-dialog').showModal();
+      });
+      item.prepend(info);
       library.append(item);
     });
   } catch {
     $('#metrics').replaceChildren();
     text($('#metrics'), 'Metrics are unavailable right now.');
+    $('#source-status').textContent = 'Could not update the source library. Please reload to retry.';
   }
 }
 
@@ -380,7 +405,20 @@ async function loadStatus() {
     if (!response.ok) throw new Error();
     const data = await response.json();
     $('#mode-badge').textContent = 'LIVE RESEARCH';
-    $('#provider-status').textContent = `${data.sources} collected sources · Compare changes, test a hypothesis, or prepare a meeting brief.`;
+    $('#provider-status').textContent = `${data.sources} sources · Evidence-led market intelligence`;
+    if (!providerOptions.length && data.providers?.length) {
+      providerOptions = data.providers;
+      const select = $('#llm-provider');
+      select.replaceChildren();
+      providerOptions.forEach(provider => {
+        const option = text(select, provider.id === 'openai' ? 'OpenAI compatible' : 'z.ai', 'option');
+        option.value = provider.id;
+      });
+      select.value = data.provider;
+      $('#llm-model').value = data.model;
+      select.disabled = false;
+      $('#llm-model').disabled = false;
+    }
     $('#ask').disabled = form.getAttribute('aria-busy') === 'true';
     $('#refresh').disabled = refreshPending || Boolean(data.refresh_progress);
     if (data.refresh_progress) {
@@ -411,8 +449,8 @@ async function loadBriefing() {
     const data = await response.json();
     const briefing = $('#briefing');
     briefing.replaceChildren();
+    briefing.classList.toggle('hidden', !data);
     if (data) {
-      briefing.classList.remove('hidden');
       text(briefing, `Last refresh · ${data.status} · ${new Date(data.completed_at).toLocaleString()}`, 'h3');
       text(briefing, data.briefing || 'No briefing available.', 'p');
       if (data.failures?.length) {
@@ -451,6 +489,35 @@ $('#refresh').addEventListener('click', async () => {
     await loadStatus();
   }
 });
+$('#llm-provider').addEventListener('change', () => {
+  $('#llm-model').value = providerOptions.find(provider => provider.id === $('#llm-provider').value)?.model || '';
+});
+
+$('#remove-dialog').addEventListener('close', async () => {
+  if ($('#remove-dialog').returnValue !== 'remove' || !removingSource) return;
+  const source = removingSource;
+  removingSource = null;
+  const feedback = $('#source-status');
+  feedback.dataset.state = 'loading';
+  feedback.textContent = 'Removing source…';
+  try {
+    await requestJson(`/api/sources/${encodeURIComponent(source.id)}`, {method: 'DELETE'});
+    chatController?.abort();
+    conversationId = null;
+    previousQuestion = null;
+    context.checked = false;
+    context.disabled = true;
+    answer.replaceChildren();
+    answer.classList.add('hidden');
+    await Promise.all([loadMetrics(), loadStatus(), loadBriefing()]);
+    feedback.dataset.state = 'success';
+    feedback.textContent = 'Source removed.';
+  } catch (error) {
+    feedback.dataset.state = 'error';
+    feedback.textContent = `Could not remove source: ${error.message}`;
+  }
+});
+
 loadMetrics();
 loadStatus();
 loadBriefing();

@@ -5,15 +5,19 @@ services:
     build: .
     environment:
       LONDON_MODE: ${LONDON_MODE:-live}
-      LLM_PROVIDER: ${LLM_PROVIDER:?Set LLM_PROVIDER to z.ai}
+      LLM_PROVIDER: ${LLM_PROVIDER:?Set LLM_PROVIDER}
       LONDON_DATA_DIR: /app/.runtime
       QDRANT_URL: http://qdrant:6333
       DDGS_BACKEND: ${DDGS_BACKEND:-auto}
       CRAWL4AI_URL: http://crawl4ai:11235
       CRAWL4AI_API_TOKEN: ${CRAWL4AI_API_TOKEN:?Set CRAWL4AI_API_TOKEN}
       EMBEDDING_CACHE: /app/.runtime/embeddings
-      ZAI_API_KEY: ${ZAI_API_KEY:?Set ZAI_API_KEY}
-      ZAI_API_BASE: ${ZAI_API_BASE:?Set ZAI_API_BASE}
+      ZAI_API_KEY: ${ZAI_API_KEY:-}
+      ZAI_API_BASE: ${ZAI_API_BASE:-}
+      ZAI_MODEL: ${ZAI_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
       LLM_MODEL: ${LLM_MODEL:?Set LLM_MODEL}
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}

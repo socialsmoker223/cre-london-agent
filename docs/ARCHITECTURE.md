@@ -3,7 +3,7 @@
 ## Contracts
 
 `models.py` owns all typed contracts. `Settings.from_env()` loads .env without overriding
-exported variables and requires LLM_PROVIDER=z.ai, ZAI_API_KEY, ZAI_API_BASE and LLM_MODEL.
+exported variables and requires LLM_PROVIDER (z.ai or openai), its API_KEY/API_BASE variables and LLM_MODEL.
 `MarketService(data_dir=None)` constructs the configured provider, remote Qdrant retrieval
 and WebResearchClient. SQLite lives in data_dir/live. There is no demo/offline runtime or
 provider injection at the service boundary. Legacy synthetic sources are excluded.
@@ -11,8 +11,7 @@ provider injection at the service boundary. Legacy synthetic sources are exclude
 Live graph: START → retrieve → agent → tools → agent (bounded loop) → verify → END.
 Initial retrieval supplies actual stored evidence even when the configured endpoint ignores tool
 choice. Follow-ups reuse the saved evidence and complete prior transcript. `AgentProvider.complete(messages, tools, timeout)->ModelTurn` preserves assistant tool-call
-IDs and keeps provider reasoning only in private conversation state, never API traces. Live provider is `ZaiProvider()` using
-ZAI_API_KEY/ZAI_API_BASE/LLM_MODEL. Missing credentials fail explicitly; no model or
+IDs and keeps provider reasoning only in private conversation state, never API traces. Live provider is `OpenAICompatibleProvider()` using the selected server configuration. Missing credentials fail explicitly; no model or
 billing-route fallback. `WebResearchClient(base_url, api_token)` implements WebClient: `ddgs` with configurable DDGS_BACKEND (default auto) for discovery and authenticated Crawl4AI /crawl for HTML/PDF extraction.
 
 `VectorIndex(path=None, *, url=None, embedder=None, cache_dir=None)` uses FastEmbed
@@ -196,3 +195,34 @@ only calculations from our tools use the calculation
 kind. If repair fails, the partial brief retains verified claims but drops verdict statements,
 marks the conclusion unavailable, and lists omissions separately from missing source coverage.
 The dashboard no longer suggests that refreshing data will repair a citation error.
+
+
+## Dashboard workspace
+
+The source sidebar removes a source through DELETE /api/sources/{id}, including all versions
+of its canonical URL, Qdrant excerpts, SQL metrics/projects/documents, saved refresh briefs and
+conversation memory. A persisted removed_sources identity prevents automatic re-ingestion.
+Removal is unavailable during refresh; ingest/removal share the service lock. If sources change
+during a chat, that chat cannot return or save stale context. A failed vector deletion leaves SQL
+intact so removal can be retried. There is no cross-store transaction or restore UI.
+
+ChatRequest accepts optional provider and model fields. GET /api/status lists only configured
+providers and default model IDs, never keys or endpoints. The browser allows a custom model ID;
+availability is checked by the provider when used. Selection is scoped to the request; refresh
+continues using the server default. z.ai and one OpenAI-compatible endpoint are supported by the
+existing SDK. Configure the secondary provider with ZAI_MODEL or OPENAI_MODEL plus the matching
+API_KEY/API_BASE environment variables; the primary uses LLM_MODEL. Endpoints must support
+chat completions, tool calls and JSON object responses. Choices last for the current page session.
+
+
+Generated briefs lead with an “In brief” summary: up to two cited claims and 80 words, using
+section=summary in the existing claim contract. The summary passes the same number, publisher
+and evidence checks as detailed claims, appears before detailed sections in the dashboard and
+copied/CLI text, and is discarded if the complete synthesis fails verification. Partial answers
+show a scope limitation instead of retaining a potentially misleading executive conclusion.
+
+If the provider omits its summary or repeats a detail verbatim, one bounded model call writes
+a distinct synthesis from the verified findings and their evidence. It uses the remaining research
+budget (at most 30 seconds), passes the existing citation/number checks and rejects copied details.
+Failures leave the verified details intact with a summary-unavailable warning; no detail is promoted
+into a summary. Verification failures never receive this synthesis step.
