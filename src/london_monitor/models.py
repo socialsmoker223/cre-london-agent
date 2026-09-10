@@ -11,6 +11,7 @@ MetricName = Literal[
 Skill = Literal["market_pulse", "comparison", "supply", "macro", "evidence", "metrics"]
 ChangeStatus = Literal["new", "strengthened", "weakened", "contradictory", "emerging"]
 Workflow = Literal["auto", "monitor", "investigate", "prepare"]
+ProviderName = Literal["z.ai", "openai", "anthropic", "gemini", "deepseek", "openrouter"]
 Section = Literal[
     "summary", "what_changed", "key_metrics", "emerging_signals", "risks", "opportunities",
     "watchlist", "disagreements",
@@ -128,7 +129,7 @@ class ChatRequest(Model):
     previous_question: str | None = Field(default=None, max_length=2000)
     conversation_id: str | None = Field(default=None, max_length=64)
     workflow: Workflow = "auto"
-    provider: Literal["z.ai", "openai"] | None = None
+    provider: ProviderName | None = None
     model: str | None = Field(default=None, min_length=1, max_length=200, pattern=r"^\S+$")
 
 
@@ -242,11 +243,13 @@ class ToolCall(Model):
     id: str
     name: str
     arguments: str
+    extra_content: dict = Field(default_factory=dict)
 
 
 class ModelTurn(Model):
     content: str = ""
     reasoning_content: str | None = None
+    reasoning_details: list[dict] = Field(default_factory=list)
     tool_calls: list[ToolCall] = Field(default_factory=list)
     usage: dict[str, int] = Field(default_factory=dict)
 

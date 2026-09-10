@@ -12,7 +12,7 @@ from threading import Lock, RLock
 from uuid import uuid4
 
 from london_monitor.agent.graph import build_graph, numbers, run_graph
-from london_monitor.config import Settings
+from london_monitor.config import PROVIDERS, Settings
 from london_monitor.models import (
     ChatRequest,
     ChatResponse,
@@ -41,7 +41,7 @@ class MarketService:
         settings = Settings.from_env()
         self.provider = OpenAICompatibleProvider(settings)
         self.providers = {settings.provider: self.provider}
-        for name in ("z.ai", "openai"):
+        for name in PROVIDERS:
             if name == settings.provider:
                 continue
             try:

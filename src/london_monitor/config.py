@@ -1,15 +1,17 @@
 import os
 from pathlib import Path
-from typing import Literal
+from typing import get_args
 
 from dotenv import load_dotenv
 from pydantic import Field, SecretStr
 
-from london_monitor.models import Model
+from london_monitor.models import Model, ProviderName
+
+PROVIDERS = get_args(ProviderName)
 
 
 class Settings(Model):
-    provider: Literal["z.ai", "openai"]
+    provider: ProviderName
     api_key: SecretStr = Field(min_length=1)
     model: str = Field(min_length=1)
     api_base: str = Field(min_length=1)
@@ -28,9 +30,9 @@ class Settings(Model):
         provider = provider or os.getenv("LLM_PROVIDER", "").strip()
         if not provider:
             raise ValueError("Missing required configuration: LLM_PROVIDER")
-        if provider not in {"z.ai", "openai"}:
-            raise ValueError("Unsupported LLM_PROVIDER; choose z.ai or openai.")
-        prefix = "ZAI" if provider == "z.ai" else "OPENAI"
+        if provider not in PROVIDERS:
+            raise ValueError(f"Unsupported LLM_PROVIDER; choose {', '.join(PROVIDERS)}.")
+        prefix = "ZAI" if provider == "z.ai" else provider.upper()
         primary = os.getenv("LLM_PROVIDER", "").strip()
         model_key = "LLM_MODEL" if provider == primary else f"{prefix}_MODEL"
         required = (f"{prefix}_API_KEY", f"{prefix}_API_BASE", model_key, "CRAWL4AI_API_TOKEN")

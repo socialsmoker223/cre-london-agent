@@ -18,12 +18,16 @@ Requires Python 3.12+, `uv`, and Docker Compose.
 uv sync --frozen
 # If you do not already have .env:
 cp -n .env.example .env
-# Set ZAI_API_KEY; retain your intended ZAI_API_BASE and LLM_MODEL.
+# Choose LLM_PROVIDER and LLM_MODEL; set its API_KEY and API_BASE (see below).
 # Set CRAWL4AI_API_TOKEN to a random token (openssl rand -hex 32).
 docker compose up -d --build
 ```
 
-Open [localhost:8000](http://localhost:8000). `.env` loads automatically for local Python commands; exported variables take precedence. Choose `LLM_PROVIDER=z.ai` or `openai`; the corresponding `ZAI_API_KEY` / `ZAI_API_BASE` or `OPENAI_API_KEY` / `OPENAI_API_BASE`, plus `LLM_MODEL`, are required; `.env.example` shows the intended route and model. Missing configuration or unsupported providers fail at startup. Rejected keys and model failures return actionable errors. There is no silent model, provider or billing-route fallback. Model calls consume the configured account's usage.
+Open [localhost:8000](http://localhost:8000). `.env` loads automatically for local Python commands;
+exported variables take precedence. Configure a provider as described below. Missing configuration
+or unsupported providers fail at startup. Rejected keys and model failures return actionable errors.
+There is no silent model, provider or billing-route fallback. Model calls consume the configured
+account's usage.
 
 Compose runs three services: app, Qdrant and pinned Crawl4AI `0.9.3`. Crawl4AI includes its browser and PDF parser; no Firecrawl checkout, separate queue or database is required. Ports bind only to localhost (`8000`, `6333`, `11235`). Set `CRAWL4AI_API_TOKEN` in `.env`; the app uses it for authenticated crawler calls. LLM credentials are never passed to the crawler. Existing app and Qdrant volumes remain unchanged.
 
@@ -48,6 +52,112 @@ process with a consistent SQLite/Qdrant dataset; do not run independent app inst
 the same Qdrant collection. Changing `LONDON_DATA_DIR` alone does not isolate remote vectors.
 
 Live SQLite data lives in `$LONDON_DATA_DIR/live/market.sqlite` (default `.runtime/live/market.sqlite`). Documents, validated metrics and refresh briefings persist across app restarts.
+
+## LLM provider and model selection
+
+Supported provider IDs are `z.ai`, `openai`, `anthropic`, `gemini`, `deepseek`, and `openrouter`.
+All use the existing OpenAI SDK's Chat Completions interface; no extra SDK installation is needed.
+
+### Configure a provider
+
+Set `LLM_PROVIDER`, `LLM_MODEL`, and the selected provider's `<PREFIX>_API_KEY` and
+`<PREFIX>_API_BASE`. All four are required; endpoints and models are never selected automatically.
+`CRAWL4AI_API_TOKEN` is also required for the research service.
+
+| `LLM_PROVIDER` | Prefix | API base | Example model ID |
+| --- | --- | --- | --- |
+| `z.ai` | `ZAI` | Keep the endpoint for your account/plan; `.env.example` retains the existing coding route | `glm-5.3-flash` (existing project configuration) |
+| `openai` | `OPENAI` | `https://api.openai.com/v1` | [`gpt-5-mini`](https://developers.openai.com/api/docs/models/gpt-5-mini) |
+| `anthropic` | `ANTHROPIC` | `https://api.anthropic.com/v1` | [`claude-sonnet-5`](https://platform.claude.com/docs/en/models/overview) |
+| `gemini` | `GEMINI` | `https://generativelanguage.googleapis.com/v1beta/openai/` | [`gemini-3.8-flash`](https://ai.google.dev/gemini-api/docs/models) |
+| `deepseek` | `DEEPSEEK` | `https://api.deepseek.com` | [`deepseek-flash`](https://api-docs.deepseek.com/) |
+| `openrouter` | `OPENROUTER` | `https://openrouter.ai/api/v1` | [`openai/gpt-5-mini`](https://openrouter.ai/openai/gpt-5-mini) |
+
+These are editable examples, not a benchmark ranking or a guarantee of account access. Use the
+exact API model ID from your provider's catalog, not a chatbot's display name. Model aliases can
+change underneath you; use a dated version where available if repeatability matters.
+
+For example, edit `.env` to use Gemini:
+
+```dotenv
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini-3.8-flash
+GEMINI_API_KEY=replace-with-your-api-key
+GEMINI_API_BASE=https://generativelanguage.googleapis.com/v1beta/openai/
+# Keep CRAWL4AI_API_TOKEN and the other research-service settings.
+```
+
+To offer additional providers in the dashboard, set each one's key, base and `<PREFIX>_MODEL`:
+
+```dotenv
+ANTHROPIC_API_KEY=replace-with-your-api-key
+ANTHROPIC_API_BASE=https://api.anthropic.com/v1
+ANTHROPIC_MODEL=claude-sonnet-5
+```
+
+The primary provider always uses `LLM_MODEL`; its `<PREFIX>_MODEL` is only used when it is secondary.
+Incomplete secondary configurations are omitted from the selector. Restart the host server after
+editing `.env`, or run `docker compose up -d --build app` for Compose. Only provider IDs and model
+IDs reach the browser; keys and endpoints stay on the server. Dashboard selection affects that
+chat request; refresh and CLI operations use the server default. Start new research when switching
+providers/models so provider-specific tool history is not reused across incompatible models.
+
+For OpenRouter as the primary provider:
+
+```dotenv
+LLM_PROVIDER=openrouter
+LLM_MODEL=openai/gpt-5-mini
+OPENROUTER_API_KEY=replace-with-your-openrouter-key
+OPENROUTER_API_BASE=https://openrouter.ai/api/v1
+```
+
+For secondary use, set `OPENROUTER_MODEL` instead of changing `LLM_MODEL`. Use an OpenRouter
+model slug including its organization prefix, such as `openai/gpt-5-mini`.
+
+### Choose a model for this agent
+
+- Start with an efficient general-purpose text model with **function/tool calling** and reliable
+  JSON output. A Flash or Mini model is a reasonable first evaluation candidate for routine
+  extraction and market briefs; the examples above are starting points, not measured winners.
+- Compare a stronger general-purpose model if the first one repeatedly misses evidence, misuses
+  tools or fails validation. Check grounded claims and completeness, not just fluent wording.
+  Research has a 180-second budget and six tool rounds; slower reasoning can reduce completeness.
+- Choose a model with enough context for source passages and follow-up history. Each response is
+  capped at 8,192 tokens (including reasoning where the provider counts it). Image, audio,
+  embedding-only and Responses-only models do not fit this Chat Completions adapter.
+- Check the linked catalogs for current prices, availability and limits before enabling live use.
+  Without an API key, use the offline validation commands below; the live dashboard still requires
+  a configured provider. Offline results validate application behavior, not a hosted model's quality.
+
+### Compatibility details
+
+[Anthropic's compatibility layer](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk)
+is intended for evaluation and is not recommended by Anthropic as a long-term production solution.
+It supports tool calls but ignores `response_format`; this adapter omits that field and relies on
+JSON instructions plus the application's validation/repair path. Native Claude structured outputs,
+provider prompt caching and advanced thinking controls are not exposed by this adapter.
+
+[Gemini's OpenAI endpoint](https://ai.google.dev/gemini-api/docs/openai) supports function calling.
+The adapter preserves [tool-call thought signatures](https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures)
+in private conversation state. It requests JSON mode only when no tools are offered, avoiding
+model-dependent combinations of tools and JSON mode. Tool rounds rely on the same JSON instructions
+and application validation. This is the Gemini Developer API route, not Vertex AI authentication.
+
+[DeepSeek supports OpenAI-compatible calls](https://api-docs.deepseek.com/); returned
+`reasoning_content` is retained for subsequent tool turns and never included in public traces.
+OpenAI uses `max_completion_tokens` to accommodate reasoning models; other providers use
+`max_tokens`. Existing z.ai calls retain their low reasoning-effort setting. No provider error
+triggers a fallback to a different account or endpoint.
+
+[OpenRouter](https://openrouter.ai/docs/quickstart) uses its own API key and billing account.
+Choose a model/endpoint supporting both tools and JSON output; not every catalog model qualifies.
+The adapter sets [`require_parameters=true` and `allow_fallbacks=false`](https://openrouter.ai/docs/guides/routing/provider-selection)
+to reject unsupported routes and disable upstream fallback. OpenRouter still selects the initial
+upstream endpoint; this does not pin one endpoint across requests. Use a concrete model slug
+rather than an automatic router or latest-model alias for predictable model selection.
+[Reasoning metadata](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens) is preserved
+unchanged in private tool-call history and excluded from public traces. No live OpenRouter calls
+were used to validate this integration.
 
 ## Research and refresh
 
@@ -108,7 +218,7 @@ Use **Sources** to open a publisher report or remove a source with **×**. Remov
 confirmation and deletes its URL versions, excerpts and metrics, clears saved briefs and
 conversation context, and excludes the URL from automatic research. There is no undo control.
 Use **Provider** and **Model** before asking; only configured providers are offered and keys stay
-on the server. A secondary provider needs its own key, endpoint and `ZAI_MODEL` or `OPENAI_MODEL`.
+on the server. A secondary provider needs its own key, endpoint and `<PREFIX>_MODEL` (see the table above).
 Refresh uses the server default. **Research activity** shows progress; **Stop research** cancels
 between bounded calls.
 

@@ -411,7 +411,7 @@ async function loadStatus() {
       const select = $('#llm-provider');
       select.replaceChildren();
       providerOptions.forEach(provider => {
-        const option = text(select, provider.id === 'openai' ? 'OpenAI compatible' : 'z.ai', 'option');
+        const option = text(select, provider.id, 'option');
         option.value = provider.id;
       });
       select.value = data.provider;

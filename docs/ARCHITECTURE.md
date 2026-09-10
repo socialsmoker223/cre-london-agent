@@ -9,7 +9,7 @@ The actual graph can loop through retrieval and tools before verification, as de
 ## Contracts
 
 `models.py` owns all typed contracts. `Settings.from_env()` loads .env without overriding
-exported variables and requires LLM_PROVIDER (z.ai or openai), its API_KEY/API_BASE variables, LLM_MODEL and CRAWL4AI_API_TOKEN.
+exported variables and requires LLM_PROVIDER (z.ai, openai, anthropic, gemini, deepseek or openrouter), its API_KEY/API_BASE variables, LLM_MODEL and CRAWL4AI_API_TOKEN.
 `MarketService(data_dir=None)` constructs the configured provider, remote Qdrant retrieval
 and WebResearchClient. SQLite lives in data_dir/live. There is no demo/offline runtime or
 provider injection at the service boundary. Legacy synthetic sources are excluded.
@@ -228,7 +228,15 @@ intact so removal can be retried. There is no cross-store transaction or restore
 ChatRequest accepts optional provider and model fields. GET /api/status lists only configured
 providers and default model IDs, never keys or endpoints. The browser allows a custom model ID;
 availability is checked by the provider when used. Selection is scoped to the request; refresh
-continues using the server default. z.ai and one OpenAI-compatible endpoint are supported by the
-existing SDK. Configure the secondary provider with ZAI_MODEL or OPENAI_MODEL plus the matching
-API_KEY/API_BASE environment variables; the primary uses LLM_MODEL. Endpoints must support
-chat completions, tool calls and JSON object responses. Choices last for the current page session.
+continues using the server default. The shared ProviderName contract defines z.ai, openai,
+anthropic, gemini, deepseek and openrouter; Settings and provider discovery use the same list. Configure each
+secondary provider with <PREFIX>_MODEL and matching API_KEY/API_BASE variables; the primary uses
+LLM_MODEL. The existing SDK handles their Chat Completions interfaces. Gemini tool-call
+extra_content (thought signatures) and DeepSeek reasoning_content survive private transcript
+round trips, never public traces. JSON mode is omitted for Anthropic and Gemini tool rounds;
+application validation/repair still applies. Anthropic uses its evaluation-oriented compatibility
+layer, not native structured outputs. See README for provider limitations and model selection.
+OpenRouter uses OPENROUTER_API_KEY/API_BASE/MODEL and organization-prefixed model slugs.
+Its requests require parameter support and disable upstream fallback; OpenRouter selects the
+initial endpoint. Its reasoning_details blocks survive private tool turns unchanged.
+Choices last for the current page session.

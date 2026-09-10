@@ -313,12 +313,15 @@ def build_graph(service, provider: AgentProvider):
             message = {"role": "assistant", "content": turn.content or None}
             if turn.reasoning_content:
                 message["reasoning_content"] = turn.reasoning_content
+            if turn.reasoning_details:
+                message["reasoning_details"] = turn.reasoning_details
             if turn.tool_calls:
                 message["tool_calls"] = [
                     {
                         "id": t.id,
                         "type": "function",
                         "function": {"name": t.name, "arguments": t.arguments},
+                        **({"extra_content": t.extra_content} if t.extra_content else {}),
                     }
                     for t in turn.tool_calls
                 ]

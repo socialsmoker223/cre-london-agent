@@ -29,10 +29,17 @@ class OpenAICompatibleProvider:
             result = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                tools=tools or None,
+                **({"tools": tools} if tools else {}),
                 **({"reasoning_effort": "low"} if self.name == "z.ai" else {}),
-                response_format={"type": "json_object"},
-                max_tokens=8192,
+                **({"extra_body": {"provider": {
+                    "require_parameters": True, "allow_fallbacks": False,
+                }}} if self.name == "openrouter" else {}),
+                # Claude ignores JSON mode; Gemini tool rounds use prompt-based JSON.
+                **({"response_format": {"type": "json_object"}}
+                   if self.name != "anthropic" and not (self.name == "gemini" and tools)
+                   else {}),
+                **({"max_completion_tokens": 8192} if self.name == "openai"
+                   else {"max_tokens": 8192}),
                 timeout=min(float(timeout), 120),
             )
         except AuthenticationError as exc:
@@ -58,6 +65,7 @@ class OpenAICompatibleProvider:
                     id=call.id,
                     name=function.name,
                     arguments=function.arguments,
+                    extra_content=getattr(call, "extra_content", None) or {},
                 )
             )
         usage = result.usage
@@ -71,4 +79,7 @@ class OpenAICompatibleProvider:
         reasoning = getattr(message, "reasoning_content", None)
         if reasoning is not None and "reasoning_content" in ModelTurn.model_fields:
             values["reasoning_content"] = reasoning
+        if self.name == "openrouter":
+            values["reasoning_details"] = getattr(message, "reasoning_details", None) or []
+            values["reasoning_content"] = reasoning or getattr(message, "reasoning", None)
         return ModelTurn(**values)
