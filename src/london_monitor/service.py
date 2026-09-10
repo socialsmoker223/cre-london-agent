@@ -349,8 +349,17 @@ def validated_metrics(rows, source_id: str, text: str) -> list[MetricCandidate]:
                     r"per annum|\bp\.?a\.?\b|/year|per year", quote, re.I
                 ):
                     continue
-            elif candidate.unit not in {"sq ft", "million sq ft"}:
-                continue
+            else:
+                areas = re.findall(
+                    r"(?<![\w.,])([0-9][0-9,]*(?:\.[0-9]+)?)\s*(million|mn|m)?\s*"
+                    r"(?:sq\.?\s*ft|square feet|square foot)\b", quote, re.I,
+                )
+                if not any(
+                    float(value.replace(",", "")) == candidate.value
+                    and candidate.unit == ("million sq ft" if scale else "sq ft")
+                    for value, scale in areas
+                ):
+                    continue
             if candidate.value < 0:
                 continue
             accepted.append(candidate)

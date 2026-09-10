@@ -7,6 +7,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      LLM_PROVIDER: offline
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -16,3 +18,5 @@ jobs:
       - run: uv sync --frozen --python 3.12
       - run: uv run ruff check .
       - run: uv run pytest
+      - run: uv run london-monitor smoke
+      - run: uv run london-monitor eval
