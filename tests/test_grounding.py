@@ -11,6 +11,26 @@ PASSAGE = (
 )
 
 
+def test_area_metrics_require_the_quoted_value_and_unit_together():
+    for metric in ("take_up", "completions", "pipeline"):
+        for amount, value, unit in (
+            ("500,000 sq ft", 500000, "sq ft"),
+            ("1.5 million square feet", 1.5, "million sq ft"),
+            ("1.5m sq. ft", 1.5, "million sq ft"),
+        ):
+            quote = f"City {metric} in Q2 2026 was {amount}."
+            row = dict(metric=metric, value=value, unit=unit, period="2026-Q2",
+                       submarket="City", definition="office area", quotation=quote)
+            assert len(validated_metrics([row], "fixture", quote)) == 1
+            wrong_unit = "sq ft" if unit == "million sq ft" else "million sq ft"
+            assert not validated_metrics([{**row, "unit": wrong_unit}], "fixture", quote)
+        for amount in ("1.5", "1.5 sq m", "1.5 buildings and 2 million sq ft"):
+            quote = f"City {metric} in Q2 2026 was {amount}."
+            row = dict(metric=metric, value=1.5, unit="million sq ft", period="2026-Q2",
+                       submarket="City", definition="office area", quotation=quote)
+            assert not validated_metrics([row], "fixture", quote)
+
+
 def test_metric_validation_preserves_quoted_basis_and_rejects_invented_observations():
     row = dict(
         metric="prime_rent", value=95, unit="GBP/sq ft", period="2026-Q2", submarket="City",

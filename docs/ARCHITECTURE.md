@@ -84,6 +84,8 @@ briefings persist. Multiple app workers require shared coordination/session stor
 Strict metric extraction may omit valid tables when geography, quarter or units are implicit;
 those figures remain source text, never invented SQL observations. Comparisons require exact
 matching metric/unit/definition and observation period, and retain conflicting source values.
+Area observations require the quoted value beside its square-foot unit and million scale;
+extraction and recrawl validation reject inferred units and unquoted conversions.
 Numerical checks validate token presence and deterministic comparison provenance, not full
 semantic entailment. Citation checks are not a source-fact audit.
 
