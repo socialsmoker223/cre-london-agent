@@ -39,6 +39,7 @@ def test_metric_validation_preserves_quoted_basis_and_rejects_invented_observati
 
 def test_answer_grounding_rejects_unknown_ids_numbers_and_uncomputed_differences():
     assert numbers("06 August 2026, £95.00") == numbers("6 August 2026, £95")
+    assert numbers("first half of 2026") == numbers("H1 2026")
     evidence = {"cbre:1": Evidence(
         id="cbre:1", source_id="cbre", excerpt=PASSAGE, category="rents",
         submarket="City", published_at=None,
@@ -53,3 +54,34 @@ def test_answer_grounding_rejects_unknown_ids_numbers_and_uncomputed_differences
         assert validate_answer(ResearchAnswer(claims=[invalid]), evidence)
     assert validate_answer(ResearchAnswer(), evidence)
     assert not validate_answer(ResearchAnswer(insufficient_evidence=True), {})
+    errors = validate_answer(ResearchAnswer(claims=[claim.model_copy(update={
+        "kind": "calculation",
+    })]), evidence)
+    assert any(claim.text in error and "source-reported" in error for error in errors)
+
+
+def test_publication_metadata_can_ground_a_publication_date():
+    from datetime import date
+
+    ref = Evidence(id='dated', source_id='report', excerpt='Office research.',
+                   category='commentary', submarket='London', published_at=date(2026, 8, 6))
+    claim = AnswerClaim(text='Published on 6 August 2026.', evidence_ids=['dated'])
+    assert not validate_answer(ResearchAnswer(claims=[claim]), {'dated': ref})
+    assert validate_answer(ResearchAnswer(claims=[claim.model_copy(update={
+        'text': 'Published on 7 August 2026.',
+    })]), {'dated': ref})
+
+
+def test_numbers_do_not_validate_a_misattributed_publisher():
+    ref = Evidence(id='cbre', source_id='report', publisher='www.cbre.co.uk',
+                   excerpt=PASSAGE, category='rents', submarket='City')
+    claim = AnswerClaim(text='Knight Frank reports City prime rent at £95 psf in Q2 2026.',
+                        evidence_ids=['cbre'])
+    assert any('Publisher Knight Frank' in error for error in validate_answer(
+        ResearchAnswer(claims=[claim]), {'cbre': ref},
+    ))
+    assert not validate_answer(ResearchAnswer(claims=[claim]), {
+        'cbre': ref.model_copy(update={'publisher': 'www.knightfrank.co.uk'}),
+    })
+    claim.text = claim.text.replace('Knight Frank', 'CBRE')
+    assert not validate_answer(ResearchAnswer(claims=[claim]), {'cbre': ref})

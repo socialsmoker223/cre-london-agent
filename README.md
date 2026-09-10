@@ -52,9 +52,27 @@ Refresh extracts numerical observations; chat page reads retain source text with
 
 **Refresh data** runs a bounded five-topic collection (four office submarkets plus macro/demand; at most 12 sources and five minutes). Its saved briefing distinguishes a first baseline, newly discovered documents, revised content, comparable metric changes, conflicts and failures. Follow-up chat can retain the previous complete tool transcript and evidence. Conversations are in memory; documents and briefings survive restarts. Use one app worker for this iteration.
 
+## Business workflows
+
+Start with **Monitor**, **Investigate**, or **Prepare** in the dashboard:
+
+- “What changed versus the previous period?” prioritizes material deltas and new evidence.
+- “Is West End outperforming City?” tests matched indicators and returns a verdict.
+- “What evidence supports flight-to-quality?” checks quality-specific evidence and gaps.
+- “Where do the sources disagree?” retains incompatible numbers, definitions and periods.
+- “Give me the five most important developments this month.” uses a publication-month window
+  and returns fewer than five when coverage cannot support five developments.
+- “Forecast the exact City prime rent to the penny in Q4 2035.” should admit insufficient evidence.
+
+Briefs separate what changed, key metrics, emerging signals, risks, opportunities and a watchlist.
+Open **Verify evidence** beside a claim to inspect source values, original quotations and derived
+calculations. Copy a meeting brief with its source list. Follow-ups retain context automatically;
+**Start new research** clears that context. No scheduler or investment recommendations are included.
+
 ## API
 
-- `POST /api/chat`: question and optional `conversation_id`; returns answer, citations, evidence, trace, mode, freshness and incomplete status.
+- `POST /api/chat`: question and optional `conversation_id`; returns a sectioned answer, workflow, verdict, gaps, citations, claim evidence IDs,
+  observations, trace, freshness and incomplete/insufficient status.
 - `GET /api/sources`, `GET /api/metrics`: source versions and validated observations.
 - `POST /api/ingest`: supplied text/Markdown with title, publisher, optional URL/date, submarket and category. This endpoint does not fetch the URL or invent SQL observations.
 - `GET /api/status`: mode, model, source count and last refresh.
@@ -65,17 +83,21 @@ Interactive schemas are at [localhost:8000/docs](http://localhost:8000/docs). To
 ## Validation
 
 ```bash
-uv run ruff check .
-uv run pytest
+LLM_PROVIDER=offline uv run ruff check .
+LLM_PROVIDER=offline uv run pytest
+LLM_PROVIDER=offline uv run london-monitor smoke
+LLM_PROVIDER=offline uv run london-monitor eval
 docker compose config --quiet
 # Real configured model and running Crawl4AI/Qdrant; consumes account usage:
 uv run london-monitor smoke
+uv run london-monitor eval --output .runtime/business-evaluation.json
 ```
 
 The focused suite checks configuration, real SQLite behavior, source provenance, numerical
-validation, arithmetic, refresh comparisons and URL boundaries. Canned model answers and
-synthetic end-to-end cases have been removed. Live acceptance is exercised in the built-in
-browser against the configured model and real collected reports.
+validation, arithmetic, refresh comparisons and URL boundaries. Offline smoke/eval run the repository’s deterministic contract tests with explicit test fixtures;
+they require the dev dependencies and do not measure live model quality. The application remains
+live-only. Live evaluation exercises the six business scenarios against the configured model;
+review the saved claims for business usefulness as well as their citation structure.
 
 The container places Hugging Face/Xet downloads in the writable app volume. Embedding
 inference is serialized in batches of 16 with two CPU threads to bound concurrent chat/refresh

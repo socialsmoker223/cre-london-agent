@@ -1,10 +1,19 @@
 """Deterministic changes and paired source evidence for semantic comparison."""
 
+import re
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from london_monitor.models import Evidence, MetricQuery
+
+
+def publisher_key(publisher):
+    name = re.sub(r"[^a-z0-9]", "", publisher.casefold())
+    for firm in ("savills", "cbre", "jll", "knightfrank", "bankofengland", "avisonyoung"):
+        if firm in name:
+            return firm
+    return name
 
 
 def previous_period(period):
@@ -106,6 +115,11 @@ def metric_changes(previous, current, query):
                 category="calculation" if kind == "calc" else "metrics",
                 submarket=market,
                 location="SQLite observations; deterministic Python comparison",
+                reporting_period=period,
+                observations=[*before, *items],
+                material=("Significant movement" in text) if kind == "calc" else None,
+                materiality_reason=movement(before[0], items[0], query) if kind == "calc" else
+                "Not scored: conflicting values or no comparable baseline.",
             )
         )
     return sorted(
@@ -149,6 +163,28 @@ def change_evidence(service, query):
             warnings.append("No previous update exists; this is a baseline, not a change report.")
         elif previous.status != "complete":
             warnings.append("Previous update was incomplete; comparison coverage is partial.")
+    elif query.basis == "publication_month":
+        month = query.month or date.today().strftime("%Y-%m")
+        start = date.fromisoformat(month + "-01")
+        boundary = (start - timedelta(days=1)).strftime("%Y-%m")
+        query = query.model_copy(update={"month": month})
+        selected = [
+            (s, "current" if s.published_at.strftime("%Y-%m") == month else "previous")
+            for s in sources
+            if s.published_at and s.published_at.strftime("%Y-%m") in (boundary, month)
+        ]
+        window_ids = set()
+        for role in ("previous", "current"):
+            window_ids.update(source_snapshot([s for s, r in selected if r == role]).values())
+        selected = [(s, role) for s, role in selected if s.id in window_ids]
+        new_ids = {s.id for s, role in selected if role == "current"}
+        baseline = not any(role == "previous" for _, role in selected)
+        metrics = [e for e in metric_changes([], rows, query) if e.source_id in new_ids]
+        warnings.append(
+            f"Publication window {month}, compared with {boundary}. Publication is not event "
+            "date; quarterly metric movements retain their reporting periods. "
+            "Undated publications are excluded; coverage is limited to collected sources."
+        )
     else:
         scoped = [m for m in rows if not query.submarkets or m.submarket in query.submarkets]
         period = query.period or max((m.period for m in scoped), default=None)
@@ -186,7 +222,17 @@ def change_evidence(service, query):
     ]
     new_ids &= {s.id for s, role in selected if role != "previous"}
     evidence = list(metrics)
-    # ponytail: bounded full-text windows; add passage ranking if source volume outgrows the budget.
+    from london_monitor.service import metric_evidence
+
+    scoped_rows = [m for m in rows if (not query.submarkets or m.submarket in query.submarkets)
+                   and (not query.period or m.period == query.period)]
+    if query.basis == "publication_month":
+        scoped_rows = [m for m in scoped_rows if m.source_id in new_ids]
+    _, metric_refs = metric_evidence(scoped_rows, sources)
+    evidence.extend(e for e in metric_refs if e.id.startswith(("conflict:", "mismatch:")))
+    from london_monitor.ingestion import article_text
+
+    # ponytail: bounded article windows; add passage ranking when articles exceed this budget.
     for role in ("previous", "current", "new"):
         window = sorted(
             (s for s, r in selected if r == role),
@@ -200,15 +246,17 @@ def change_evidence(service, query):
             if doc is None:
                 warnings.append(f"Stored text unavailable for {source.id}.")
                 continue
-            if len(doc.text) > 5000:
-                warnings.append(f"Text truncated for {source.id}; theme coverage is partial.")
+            passage = article_text(doc.text)
+            if len(passage) > 18000:
+                warnings.append(f"Only part of {source.title} was compared; "
+                                "search its remaining passages before claiming full coverage.")
             evidence.append(
                 Evidence(
                     id=f"change:{query.basis}:{role}:{source.id}",
                     source_id=source.id,
                     excerpt=(
                         f"{role.capitalize()} evidence. Published: {source.published_at}; "
-                        f"first ingested: {source.retrieved_at.isoformat()}.\n{doc.text[:5000]}"
+                        f"first ingested: {source.retrieved_at.isoformat()}.\n{passage[:18000]}"
                     ),
                     source_title=source.title,
                     publisher=source.publisher,
@@ -221,9 +269,23 @@ def change_evidence(service, query):
             )
     if not any(e.comparison_role == "previous" for e in evidence):
         warnings.append("No previous text evidence available; risk movement is unknown.")
+    publishers = {s.id: publisher_key(s.publisher) for s in sources}
+    dates = {s.id: s.published_at or date.min for s in sources}
+    # ponytail: transparent screening, not a predictive score; calibrate with users after the PoC.
+    priority = sorted(
+        (e for e in evidence if e.material or e.id.startswith(("conflict:", "mismatch:"))
+         or e.comparison_role in {"new", "current"}),
+        key=lambda e: (
+            not bool(e.material),
+            -max(dates.get(s, date.min).toordinal() for s in (e.source_ids or [e.source_id])),
+            -len({publishers.get(s, "") for s in (e.source_ids or [e.source_id])} - {""}),
+            e.id,
+        ),
+    )
     return {
         "basis": query.basis,
         "period": query.period,
+        "month": query.month,
         "previous_boundary": boundary,
         "baseline": baseline,
         "new_source_ids": sorted(new_ids),
@@ -234,6 +296,14 @@ def change_evidence(service, query):
         if previous
         else [],
         "warnings": warnings,
+        "priority_evidence_ids": [e.id for e in priority],
+        "materiality_rule": (
+            f"Lead with movements >= {query.relative_threshold_pct:g}% relative or "
+            f">= {query.rate_threshold_pp:g} percentage points for rates; then disagreements "
+            "and new evidence. Within groups: newest publication, then distinct publishers. "
+            "Publisher counts are not proof of independence. Below-threshold metrics remain "
+            "available for investigations. Qualitative implications require cited interpretation."
+        ),
         "evidence": [e.model_dump(mode="json") for e in evidence],
     }, evidence
 

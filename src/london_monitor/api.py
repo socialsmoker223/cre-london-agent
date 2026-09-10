@@ -134,7 +134,7 @@ def create_app(service: Any | None = None) -> FastAPI:
     def metrics(
         request: Request,
         submarkets: Annotated[list[Submarket] | None, Query(max_length=5)] = None,
-        metric: Annotated[list[MetricName] | None, Query(alias="metrics", max_length=5)] = None,
+        metric: Annotated[list[MetricName] | None, Query(alias="metrics", max_length=11)] = None,
         period: Annotated[str | None, Query(pattern=r"^\d{4}-Q[1-4]$")] = None,
         latest: bool = True,
         limit: int = Query(default=100, ge=1, le=200),

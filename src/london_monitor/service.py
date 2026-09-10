@@ -4,6 +4,7 @@ import re
 import time
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable
+from decimal import Decimal
 from itertools import combinations
 from pathlib import Path
 from threading import Lock, RLock
@@ -68,8 +69,8 @@ class MarketService:
         response = run_graph(self.graph, request, history, evidence, transcript, refs, emit)
         response.conversation_id = session_id
         with self.lock:
-            # ponytail: retain one complete tool transcript; persist sessions if needed.
-            messages = transcript
+            # ponytail: three complete turns in memory; persist sessions for longer investigations.
+            messages = [*history, *transcript]
             if (
                 messages
                 and messages[-1]["role"] == "assistant"
@@ -78,6 +79,10 @@ class MarketService:
                 messages[-1] = {"role": "assistant", "content": response.answer}
             else:
                 messages.append({"role": "assistant", "content": response.answer})
+            ends = [i for i, m in enumerate(messages)
+                    if m["role"] == "assistant" and not m.get("tool_calls")]
+            if len(ends) > 3:
+                messages = messages[ends[-4] + 1:]
             self.conversations[session_id] = (messages, refs)
             self.conversations.move_to_end(session_id)
             while len(self.conversations) > 50:
@@ -109,6 +114,7 @@ class MarketService:
         return ingest(request, self.store, self.retriever)
 
     def collect(self, query: ScrapeQuery, deadline: float, *, with_metrics: bool = True):
+        from london_monitor.ingestion import article_text
         from london_monitor.retrieval import chunk_text
 
         remaining = deadline - time.monotonic()
@@ -133,16 +139,16 @@ class MarketService:
             raise ValueError("Document persistence failed")
         excerpts = [
             Evidence(
-                id=f"{result.source.id}:chunk:{i}",
+                id=f"{result.source.id}:article:{i}",
                 source_id=result.source.id,
                 excerpt=excerpt,
                 source_title=result.source.title,
                 category=query.category,
                 submarket=query.submarket,
                 published_at=result.source.published_at,
-                location=location,
+                location=f"Article {location}",
             )
-            for i, (location, excerpt) in enumerate(chunk_text(doc.text))
+            for i, (location, excerpt) in enumerate(chunk_text(article_text(doc.text)))
         ][:12]
         extraction_warning = None
         usage = {}
@@ -164,15 +170,24 @@ class MarketService:
         }, excerpts
 
     def extract_metrics(self, source: Source, text: str, deadline: float):
+        from london_monitor.ingestion import article_text
+
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return
         prompt = (
             "Extract at most 12 explicit London office observations. Return JSON {metrics:[...]} "
-            "with metric (prime_rent, grade_a_rent, vacancy, take_up, bank_rate), value (number), "
+            "with metric (prime_rent, grade_a_rent, vacancy, availability, grade_a_vacancy, "
+            "secondary_vacancy, take_up, completions, pipeline, prelet_share, bank_rate), "
+            "value (number), "
             "unit, period (YYYY-QN), submarket (City, West End, Canary Wharf, Midtown / Fringe, "
             "London), definition and quotation. Use concise definitions consistently, separating "
-            "prime from Grade A rents, vacancy from availability, quarterly from annual take-up. "
+            "prime from Grade A rents, vacancy from availability, Grade A from secondary vacancy, "
+            "quarterly from annual take-up, actual completions from future pipeline. "
+            "For pipeline preserve delivery horizon in the definition; prelet_share uses %. "
+            "Definitions describe the series, never its value, reporting date or growth. "
+            "Prefer 'prime headline rent', 'Grade A vacancy', 'all office vacancy', "
+            "'quarterly office take-up' where accurate; preserve narrower geography qualifiers. "
             "Preserve narrower geographies in the definition. Quotation must be an exact "
             "contiguous "
             "source passage containing the value, geography, explicit year and quarter. "
@@ -185,7 +200,7 @@ class MarketService:
         turn = self.provider.complete(
             [
                 {"role": "system", "content": prompt},
-                {"role": "user", "content": json.dumps({"text": text[:24000]})},
+                {"role": "user", "content": json.dumps({"text": article_text(text)[:24000]})},
             ],
             [],
             timeout=min(60, remaining),
@@ -193,7 +208,8 @@ class MarketService:
         rows = json.loads(turn.content).get("metrics", [])
         accepted = validated_metrics(rows, source.id, text)
         self.store.add_metrics(accepted)
-        LOG.info("metric_extraction source=%s accepted=%d", source.id, len(accepted))
+        LOG.info("metric_extraction source=%s candidates=%d accepted=%d",
+                 source.id, len(rows), len(accepted))
         return turn.usage
 
     def metric_evidence(self, query: MetricQuery):
@@ -270,7 +286,10 @@ def validated_metrics(rows, source_id: str, text: str) -> list[MetricCandidate]:
                     continue
             elif not re.search(geography[candidate.submarket], quote, re.I):
                 continue
-            if candidate.metric in {"vacancy", "bank_rate"}:
+            if candidate.metric in {
+                "vacancy", "availability", "grade_a_vacancy", "secondary_vacancy",
+                "prelet_share", "bank_rate",
+            }:
                 if (candidate.unit != "%" or not 0 <= candidate.value <= 100
                         or not re.search(r"%|percent", quote, re.I)):
                     continue
@@ -310,10 +329,14 @@ def metric_evidence(rows, sources):
                 submarket=m.submarket,
                 published_at=sources[m.source_id].published_at,
                 location="SQLite validated observation",
+                source_title=sources[m.source_id].title,
+                publisher=sources[m.source_id].publisher,
+                reporting_period=m.period,
+                observations=[m],
             )
         )
         grouped[(m.metric, m.unit, m.definition)].append(m)
-    from london_monitor.changes import metric_changes
+    from london_monitor.changes import metric_changes, previous_period
     from london_monitor.models import ChangeQuery
 
     evidence.extend(e for e in metric_changes([], rows, ChangeQuery()) if e.id.startswith("calc:"))
@@ -338,6 +361,8 @@ def metric_evidence(rows, sources):
                     category="metrics",
                     submarket=market,
                     location="SQLite source disagreement",
+                    reporting_period=period,
+                    observations=reports,
                 )
             )
         for a, b in combinations(unambiguous, 2):
@@ -355,6 +380,50 @@ def metric_evidence(rows, sources):
                     category="calculation",
                     submarket="London",
                     location="Python calculation",
+                    reporting_period=b.period,
+                    observations=[a, b],
                 )
             )
+            prior = {(m.period, m.submarket): m for m in unambiguous}
+            a0 = prior.get((previous_period(a.period), a.submarket))
+            b0 = prior.get((previous_period(b.period), b.submarket))
+            if not a0 or not b0 or (a.unit != "%" and (not a0.value or not b0.value)):
+                continue
+            da = Decimal(str(a.value)) - Decimal(str(a0.value))
+            db = Decimal(str(b.value)) - Decimal(str(b0.value))
+            if a.unit != "%":
+                da = da / abs(Decimal(str(a0.value))) * 100
+                db = db / abs(Decimal(str(b0.value))) * 100
+            inputs = [a0, a, b0, b]
+            evidence.append(Evidence(
+                id=f"calc:growth:{a.submarket}:{b.submarket}:{b.metric}:{b.period}:"
+                f"{b.unit}:{b.definition}",
+                source_id=b.source_id,
+                source_ids=list(dict.fromkeys(m.source_id for m in inputs)),
+                excerpt=f"{previous_period(b.period)} to {b.period} {b.metric} "
+                f"({b.definition}): {a.submarket} {a0.value:g} -> {a.value:g} {a.unit}, "
+                f"change {da:+.2f}{' percentage points' if a.unit == '%' else '%'}; "
+                f"{b.submarket} {b0.value:g} -> {b.value:g} {b.unit}, "
+                f"change {db:+.2f}{' percentage points' if b.unit == '%' else '%'}; "
+                f"{b.submarket} minus {a.submarket} movement = {db - da:+.2f} percentage points. "
+                "A higher rent level alone does not establish outperformance.",
+                category="calculation", submarket="London", reporting_period=b.period,
+                observations=inputs, location="Python comparison of matched period movements",
+            ))
+    by_market = defaultdict(list)
+    for m in rows:
+        by_market[(m.metric, m.submarket)].append(m)
+    for (metric, market), reports in by_market.items():
+        if len({(m.unit, m.definition) for m in reports}) < 2:
+            continue
+        evidence.append(Evidence(
+            id=f"mismatch:{market}:{metric}", source_id=reports[0].source_id,
+            source_ids=list(dict.fromkeys(m.source_id for m in reports)),
+            excerpt=f"Definition/unit disagreement for {market} {metric}: "
+            + "; ".join(f"{m.value:g} {m.unit}, {m.period}, {m.definition} from {m.source_id}"
+                        for m in reports)
+            + ". These series are not interchangeable; do not average or calculate across them.",
+            category="metrics", submarket=market, observations=reports,
+            location="SQLite comparability check",
+        ))
     return rows, evidence

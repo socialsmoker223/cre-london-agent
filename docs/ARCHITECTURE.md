@@ -41,7 +41,7 @@ ingest(IngestRequest); refresh(RefreshRequest)->RefreshResult;
 latest_refresh()->RefreshResult|None; status()->dict; close().
 GET /api/status exposes refresh progress and provider/model; GET /api/refresh exposes the saved briefing; POST /api/refresh runs
 a bounded synchronous refresh. Chat retains JSON response and adds mode/incomplete/evidence/
-conversation_id/freshness. UI opts into prior conversation, never puts secrets in responses.
+conversation_id/freshness. UI continues the prior conversation by default after a successful answer, never puts secrets in responses.
 
 `POST /api/chat/stream` accepts the same ChatRequest and emits SSE JSON events: `activity`
 (message), then exactly one terminal `result` (ChatResponse in data) or `error` (safe message).
@@ -58,7 +58,8 @@ log, and retains the last answer on failure, disconnect or Stop. Truncated strea
 ## Trust and budgets
 
 Live chat permits six tool rounds, three searches, six scrapes, 180 seconds total.
-Tools are query_market_metrics, search_market_evidence, search_web, scrape_source.
+Tools are compare_market_changes, query_market_metrics, search_market_evidence, search_web,
+scrape_source.
 Search snippets cannot ground final facts; full extracted content must be ingested first.
 Source URLs must be public HTTP(S), without credentials. The app checks addresses before each
 crawl. Pinned Crawl4AI 0.9.3 applies its DNS-pinning egress broker to Chromium and validates
@@ -73,7 +74,7 @@ checks do not prove that a source is true. One malformed answer repair is allowe
 ## Deliberate limits
 
 One process owns refresh coordination and up to 50 in-memory conversations, each retaining
-one complete preceding tool transcript. Restarts clear conversations; SQLite documents and
+three complete preceding turns. Restarts clear conversations; SQLite documents and
 briefings persist. Multiple app workers require shared coordination/session storage.
 Strict metric extraction may omit valid tables when geography, quarter or units are implicit;
 those figures remain source text, never invented SQL observations. Comparisons require exact
@@ -122,3 +123,76 @@ unchanged refreshes. First collection establishes a baseline without claiming te
 Analysis failures preserve numerical results and mark the refresh incomplete. Saved briefing text
 and chat responses prioritize movements and changed signals over a full market-state recap.
 No new dependencies or storage tables are required; existing refresh JSON accepts the added fields.
+
+
+## Business output and investigation
+
+ChatRequest accepts an optional workflow (auto, monitor, investigate, prepare). Common business
+questions select the relevant workflow deterministically; the model handles other wording.
+Monitor/Prepare prepare change evidence before synthesis. Investigate prepares metric observations
+and matched cross-market period growth, then retrieves qualitative support and counterevidence.
+Higher rent levels alone do not prove outperformance. The metric vocabulary distinguishes
+availability, Grade A/secondary vacancy, completions, future pipeline and prelet share; strict
+quoted extraction still applies. Definitions describe series, not their current value or date.
+
+ResearchAnswer and ChatResponse expose a hypothesis verdict, evidence gaps, and sectioned claims:
+what_changed, key_metrics, emerging_signals, risks, opportunities, watchlist and disagreements.
+Every claim retains evidence IDs through to the dashboard. Structured evidence carries original
+observations (including definition, reporting period and quotation) beside deterministic results.
+The verifier checks factual numbers against quoted source content and requires calculated numbers
+in calculation excerpts. Implications and watchlists must be interpretations. Disagreement claims
+must retain both sources. A cited historical observation never clears an insufficient forecast
+verdict. After one repair, a partly valid answer retains only claims that individually pass all checks,
+with incomplete status and an insufficient verdict; the rejected conclusion is discarded.
+If no claims survive, the response returns source excerpts with an explicit insufficiency notice.
+These checks enforce provenance and output contracts, not full semantic entailment or causality.
+
+Publication-month comparisons use explicit YYYY-MM windows (default: current UTC month), with the
+previous calendar month as boundary. Unknown dates and newly ingested older publications are not
+this month's news. Quarterly deltas published in the month keep their reporting periods. Text
+coverage is bounded and disclosed. Last-checked questions use the saved refresh as an explicit
+proxy baseline; personal visit timestamps are not tracked.
+
+Material movements are screened at the configured magnitude thresholds, followed by disagreements
+and new evidence; ties use newest publication and then distinct publishers. The rule and ordered
+evidence IDs are returned by the tool. Publisher counts do not prove independence. Below-threshold
+movements remain accessible for investigation. No opaque model materiality score is introduced.
+
+The first briefing section contains at most five developments. Remaining sections and per-claim
+verification are expandable; key metrics and disagreements are expanded. Missing sections are not
+filled with invented claims. Copy includes the numbered source list. Conversation memory retains
+three complete turns and the current answer's cited evidence; sessions remain bounded and volatile.
+
+Offline smoke and eval are repository test entry points requiring the dev dependencies, explicitly
+separate from the live-only application. Live eval runs the six product scenarios and optionally
+saves full responses for human assessment; a structurally valid answer is not a business-quality
+acceptance result by itself.
+
+
+Publication metadata can be recovered during ingestion from an explicit “Published on” label or
+the observed Savills publication/report heading wrapper or JLL dated Insight header. Event dates, related-article links and
+conflicting dates are excluded. Reingesting unchanged content fills only a previously unknown
+publication date and reindexes current-version metadata; historical versions are not promoted; source identity and existing known dates remain
+unchanged. Comparison passages start at a recognizable article heading when available, avoiding
+navigation-heavy prefixes while preserving the original stored document. Known publisher aliases
+(e.g. Savills UK and savills.com) share one corroboration key; this still does not establish that
+reports from distinct publishers are independent.
+
+Recrawling a canonical URL revalidates its current observations against the new text before
+attaching them to the new source version. Removed or changed quotations are not carried forward;
+historical observations remain stored. This avoids emptying the dashboard merely because a
+chat scrape created a new version without running model extraction.
+
+Metric extraction and comparison use the article body after observed navigation wrappers, with
+author/related-research footers excluded. Comparison windows retain up to 18,000 characters per
+article; longer coverage remains explicitly partial. Raw documents remain available in storage.
+Extraction logs distinguish candidate count from accepted count. Implicit quarters, units and
+geography still fail the structured contract; source-reported figures can remain citeable in text.
+
+Answer repair receives the draft, question and evidence once, with claim-specific rejection
+reasons. Named preferred publishers must appear in the cited source metadata or passage; matching
+numbers alone cannot validate a misattributed publisher. Publisher-reported growth is a fact;
+only calculations from our tools use the calculation
+kind. If repair fails, the partial brief retains verified claims but drops verdict statements,
+marks the conclusion unavailable, and lists omissions separately from missing source coverage.
+The dashboard no longer suggests that refreshing data will repair a citation error.

@@ -118,7 +118,13 @@ CREATE TABLE IF NOT EXISTS refreshes (run_id TEXT PRIMARY KEY, payload TEXT NOT 
                     source.canonical_url,
                 ),
             )
-            return cur.rowcount == 1
+            inserted = cur.rowcount == 1
+            if not inserted and source.published_at:
+                self.connection.execute(
+                    "UPDATE sources SET published_at=? WHERE id=? AND published_at IS NULL",
+                    (source.published_at.isoformat(), source.id),
+                )
+            return inserted
 
     def list_sources(self) -> list[Source]:
         with self._lock:

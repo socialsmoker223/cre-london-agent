@@ -9,12 +9,25 @@ let conversationId = null;
 let refreshTimer = null;
 let refreshPending = false;
 let chatController = null;
+let workflow = 'auto';
 context.disabled = true;
 
-document.querySelectorAll('.examples button').forEach((button) => button.addEventListener('click', () => {
-  question.value = button.textContent;
+document.querySelectorAll('.examples button:not(#new-research), .workflows button').forEach((button) => button.addEventListener('click', () => {
+  question.value = button.dataset.question || button.textContent;
+  workflow = button.dataset.workflow || 'auto';
+  context.checked = false;
   question.focus();
 }));
+question.addEventListener('input', () => { workflow = 'auto'; });
+$('#new-research').addEventListener('click', () => {
+  conversationId = null;
+  previousQuestion = null;
+  context.checked = false;
+  context.disabled = true;
+  workflow = 'auto';
+  question.value = '';
+  question.focus();
+});
 
 function text(parent, value, tag = 'span') {
   const node = document.createElement(tag);
@@ -51,16 +64,79 @@ function renderAnswer(data, askedQuestion) {
   answer.classList.remove('hidden');
   text(answer, `Question · ${askedQuestion}`, 'p').className = 'answer-meta';
   const fallback = data.incomplete && data.answer.startsWith('Evidence-only fallback');
-  text(answer, fallback ? 'Source evidence' : 'Market answer', 'h2');
-  text(answer, fallback ? 'A verified synthesis is unavailable. Review the cited source excerpts below.' : data.answer, 'p').className = 'answer-body';
-  if (data.incomplete) text(answer, 'This answer is incomplete; refresh or try again.', 'p');
+  const verificationFailed = (data.trace?.failures || []).some(failure => failure.startsWith('verification:'));
+  text(answer, fallback ? 'Source evidence' : data.conclusion || 'Market brief', 'h2');
+  if (data.verdict) text(answer, verificationFailed ? 'Overall conclusion unavailable' : data.verdict, 'p').className = 'verdict';
+  if (fallback) text(answer, 'A verified synthesis is unavailable. Review the cited source excerpts below.', 'p');
+  if (!data.claims.length) text(answer, data.answer, 'p').className = 'answer-body';
+  const sections = {
+    what_changed: 'What changed', key_metrics: 'Key metrics', emerging_signals: 'Emerging signals',
+    risks: 'Risks to investigate', opportunities: 'Opportunities to investigate',
+    watchlist: 'Watchlist', disagreements: 'Where sources disagree',
+  };
+  Object.entries(sections).forEach(([key, title]) => {
+    const claims = data.claims.filter(claim => (claim.section || 'key_metrics') === key);
+    if (!claims.length) return;
+    const section = document.createElement(key === 'what_changed' ? 'section' : 'details');
+    section.className = 'brief-section';
+    if (key === 'key_metrics' || key === 'disagreements') section.open = true;
+    text(section, title, key === 'what_changed' ? 'h3' : 'summary');
+    const list = document.createElement('ol');
+    claims.forEach((claim) => {
+      const item = document.createElement('li');
+      text(item, claim.kind === 'calculation' ? 'Fact · calculated' : claim.kind === 'interpretation' ? 'Interpretation' : 'Fact', 'small').className = 'claim-kind';
+      text(item, claim.text, 'p');
+      const evidence = document.createElement('details');
+      evidence.className = 'claim-evidence';
+      text(evidence, 'Verify evidence', 'summary');
+      const refs = (data.evidence || []).filter(ref => (claim.evidence_ids || []).includes(ref.id));
+      refs.forEach(ref => {
+        text(evidence, `${ref.reporting_period ? `Reporting period · ${ref.reporting_period} · ` : ''}${ref.location || 'Source excerpt'}`, 'p');
+        text(evidence, ref.excerpt, 'blockquote');
+        if (ref.materiality_reason) text(evidence, `Screening rule · ${ref.materiality_reason}`, 'p');
+        (ref.observations || []).forEach(metric => {
+          const source = data.citations.find(c => c.source.id === metric.source_id)?.source;
+          text(evidence, `Source value · ${metric.submarket} · ${metric.metric.replaceAll('_', ' ')} · ${metric.value} ${metric.unit} · ${metric.period} · ${metric.definition}`, 'p');
+          text(evidence, metric.quotation || 'No verbatim quotation retained.', 'blockquote');
+          sourceLink(evidence, source);
+        });
+      });
+      claim.source_ids.forEach(id => {
+        const citation = data.citations.find(c => c.source.id === id);
+        if (!citation) return;
+        const link = text(item, ` [${citation.number}]`, 'a');
+        link.href = `#source-${citation.number}`;
+        link.addEventListener('click', () => { $(`#source-${citation.number}`).open = true; });
+      });
+      item.append(evidence);
+      list.append(item);
+    });
+    section.append(list);
+    answer.append(section);
+  });
+  if (data.gaps?.length) {
+    text(answer, 'Evidence gaps', 'h3');
+    const gaps = document.createElement('ul');
+    data.gaps.forEach(gap => text(gaps, gap, 'li'));
+    answer.append(gaps);
+  }
+  if (data.incomplete) text(answer, verificationFailed
+    ? 'Some draft claims could not be matched to their citations. Review the verified claims below or ask a narrower question; refreshing data alone will not fix a citation error.'
+    : 'Research could not finish all checks. See the limitations below for what remains unresolved.', 'p');
   if (data.freshness) text(answer, `Freshness · ${data.freshness}`, 'p').className = 'answer-meta';
-  (data.warnings || []).forEach((warning) => text(answer, warning, 'p'));
+  if (data.warnings?.length) {
+    const limitations = document.createElement('details');
+    text(limitations, 'Comparison scope and limitations', 'summary');
+    data.warnings.forEach(warning => text(limitations, warning, 'p'));
+    answer.append(limitations);
+  }
   const citations = document.createElement('div');
   citations.className = 'citations';
+  text(citations, 'Sources', 'h3');
   (data.citations || []).forEach((citation) => {
     const item = document.createElement('details');
     item.className = 'citation';
+    item.id = `source-${citation.number}`;
     const summary = document.createElement('summary');
     text(summary, `${citation.number}. ${citation.source.title} · ${citation.source.publisher} · ${citation.source.published_at || "date unknown"}`);
     item.append(summary);
@@ -76,6 +152,30 @@ function renderAnswer(data, askedQuestion) {
     citations.append(item);
   });
   answer.append(citations);
+  const followups = document.createElement('div');
+  followups.className = 'examples followups';
+  ['Expand point 3', 'Compare with last quarter', 'What evidence supports that?', 'Where do sources disagree?', 'What should we watch next?'].forEach(prompt => {
+    const button = text(followups, prompt, 'button');
+    button.type = 'button';
+    button.addEventListener('click', () => {
+      question.value = prompt;
+      workflow = 'auto';
+      context.checked = true;
+      question.focus();
+      question.scrollIntoView({block: 'center'});
+    });
+  });
+  const copy = text(followups, 'Copy meeting brief', 'button');
+  copy.type = 'button';
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(data.answer + '\n\nSources\n' + data.citations.map(c =>
+        `[${c.number}] ${c.source.title} · ${c.source.publisher} · ${c.source.published_at || 'Date unknown'} · ${c.source.url || 'Stored source'}`
+      ).join('\n'));
+      copy.textContent = 'Brief copied';
+    } catch { copy.textContent = 'Copy unavailable — select the answer text'; }
+  });
+  answer.append(followups);
   if (data.trace) {
     const trace = document.createElement('details');
     trace.className = 'trace';
@@ -90,8 +190,11 @@ function renderAnswer(data, askedQuestion) {
     text(evidence, `Supporting excerpts (${data.evidence.length})`, 'summary');
     data.evidence.forEach((item) => {
       const source = data.citations.find(citation => citation.source.id === item.source_id)?.source;
-      text(evidence, `${source?.title || 'Source'} · ${item.location || 'Source excerpt'}`, 'h3');
-      text(evidence, item.excerpt, 'p');
+      const excerpt = document.createElement('details');
+      excerpt.className = 'citation';
+      text(excerpt, `${source?.title || 'Source'} · ${item.location || 'Source excerpt'}`, 'summary');
+      text(excerpt, item.excerpt, 'p');
+      evidence.append(excerpt);
     });
     answer.append(evidence);
   }
@@ -176,7 +279,7 @@ form.addEventListener('submit', async (event) => {
   activity.scrollIntoView({block: 'nearest'});
   const timer = setInterval(updateStatus, 1000);
   try {
-    const payload = { question: value };
+    const payload = { question: value, workflow };
     if (context.checked && previousQuestion) payload.previous_question = previousQuestion;
     if (context.checked && conversationId) payload.conversation_id = conversationId;
     const result = await streamChat(payload, chatController.signal, message => {
@@ -195,6 +298,8 @@ form.addEventListener('submit', async (event) => {
     previousQuestion = value;
     if (result?.conversation_id) conversationId = result.conversation_id;
     context.disabled = false;
+    context.checked = true;
+    answer.scrollIntoView({block: 'start'});
     await loadMetrics();
   } catch (error) {
     clearInterval(timer);
@@ -252,7 +357,7 @@ async function loadMetrics() {
     const container = $('#metrics');
     container.replaceChildren();
     if (metrics.length) container.append(table);
-    else text(container, 'No validated numerical indicators yet. Refresh data to collect evidence; available reports are listed below.');
+    else text(container, 'No structured observations are available for the current source versions. Reports may contain figures that could not be validated with an explicit period, geography and unit; inspect the collected sources below.');
     const library = $('#sources');
     library.replaceChildren();
     const list = Object.values(sources);
@@ -275,7 +380,7 @@ async function loadStatus() {
     if (!response.ok) throw new Error();
     const data = await response.json();
     $('#mode-badge').textContent = 'LIVE RESEARCH';
-    $('#provider-status').textContent = `${data.provider} · ${data.model} · ${data.sources} collected sources`;
+    $('#provider-status').textContent = `${data.sources} collected sources · Compare changes, test a hypothesis, or prepare a meeting brief.`;
     $('#ask').disabled = form.getAttribute('aria-busy') === 'true';
     $('#refresh').disabled = refreshPending || Boolean(data.refresh_progress);
     if (data.refresh_progress) {

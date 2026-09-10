@@ -4,9 +4,18 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 Submarket = Literal["City", "West End", "Canary Wharf", "Midtown / Fringe", "London"]
-MetricName = Literal["prime_rent", "grade_a_rent", "vacancy", "take_up", "bank_rate"]
+MetricName = Literal[
+    "prime_rent", "grade_a_rent", "vacancy", "availability", "grade_a_vacancy",
+    "secondary_vacancy", "take_up", "completions", "pipeline", "prelet_share", "bank_rate",
+]
 Skill = Literal["market_pulse", "comparison", "supply", "macro", "evidence", "metrics"]
 ChangeStatus = Literal["new", "strengthened", "weakened", "contradictory", "emerging"]
+Workflow = Literal["auto", "monitor", "investigate", "prepare"]
+Section = Literal[
+    "what_changed", "key_metrics", "emerging_signals", "risks", "opportunities",
+    "watchlist", "disagreements",
+]
+Verdict = Literal["Supported", "Partially supported", "Not supported", "Insufficient evidence"]
 
 
 class Model(BaseModel):
@@ -63,18 +72,23 @@ class Evidence(Model):
     location: str = ""
     comparison_role: Literal["previous", "current", "new"] | None = None
     publisher: str = ""
+    reporting_period: str | None = None
+    observations: list[Metric] = Field(default_factory=list)
+    material: bool | None = None
+    materiality_reason: str = ""
 
 
 class MetricQuery(Model):
     submarkets: list[Submarket] = Field(default_factory=list, max_length=5)
-    metrics: list[MetricName] = Field(default_factory=list, max_length=5)
+    metrics: list[MetricName] = Field(default_factory=list, max_length=11)
     period: str | None = Field(default=None, pattern=r"^\d{4}-Q[1-4]$")
     latest: bool = True
     limit: int = Field(default=100, ge=1, le=200)
 
 
 class ChangeQuery(Model):
-    basis: Literal["reporting_period", "last_update"] = "reporting_period"
+    basis: Literal["reporting_period", "last_update", "publication_month"] = "reporting_period"
+    month: str | None = Field(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     period: str | None = Field(default=None, pattern=r"^\d{4}-Q[1-4]$")
     submarkets: list[Submarket] = Field(default_factory=list, max_length=5)
     relative_threshold_pct: float = Field(default=5, gt=0, allow_inf_nan=False)
@@ -113,6 +127,7 @@ class ChatRequest(Model):
     question: str = Field(min_length=3, max_length=2000)
     previous_question: str | None = Field(default=None, max_length=2000)
     conversation_id: str | None = Field(default=None, max_length=64)
+    workflow: Workflow = "auto"
 
 
 class Citation(Model):
@@ -126,6 +141,8 @@ class Claim(Model):
     kind: Literal["fact", "calculation", "interpretation"] = "fact"
     source_ids: list[str] = Field(min_length=1)
     change_status: ChangeStatus | None = None
+    section: Section = "key_metrics"
+    evidence_ids: list[str] = Field(default_factory=list)
 
 
 class Trace(Model):
@@ -155,6 +172,10 @@ class ChatResponse(Model):
     conversation_id: str | None = None
     evidence: list[Evidence] = Field(default_factory=list)
     freshness: str = ""
+    conclusion: str = ""
+    workflow: Workflow = "auto"
+    verdict: Verdict | None = None
+    gaps: list[str] = Field(default_factory=list)
 
 
 class Store(Protocol):
@@ -230,12 +251,16 @@ class AnswerClaim(Model):
     kind: Literal["fact", "calculation", "interpretation"] = "fact"
     evidence_ids: list[str] = Field(min_length=1, max_length=12)
     change_status: ChangeStatus | None = None
+    section: Section = "key_metrics"
 
 
 class ResearchAnswer(Model):
     conclusion: str = Field(default="", max_length=2000)
     claims: list[AnswerClaim] = Field(default_factory=list, max_length=30)
     insufficient_evidence: bool = False
+    workflow: Workflow = "auto"
+    verdict: Verdict | None = None
+    gaps: list[str] = Field(default_factory=list, max_length=12)
 
 
 class MetricCandidate(Metric):

@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>London Market Monitor</title>
-  <link rel="stylesheet" href="/static/styles.css?v=6"><style>.hidden{display:none}</style>
+  <link rel="stylesheet" href="/static/styles.css?v=7"><style>.hidden{display:none}</style>
 </head>
 <body>
   <header class="topbar"><a class="brand" href="/"><span class="mark">L</span><span>London<br><b>Market Monitor</b></span></a><span class="mode-pill" id="mode-badge">LOADING</span></header>
   <main class="shell">
-    <section class="hero"><p class="eyebrow">EVIDENCE GROUNDED INTELLIGENCE</p><h1>See the market<br><em>with clarity.</em></h1><p class="lede">Ask about London offices, rents, vacancy, supply and the macro forces shaping them.</p></section>
+    <section class="hero"><p class="eyebrow">EVIDENCE GROUNDED INTELLIGENCE</p><h1>What changed?<br><em>Why does it matter?</em></h1><p class="lede">Move from fragmented London office research to a concise brief, a tested hypothesis, and the evidence behind it.</p></section>
     <p id="provider-status" class="service-status" aria-live="polite">Connecting to the configured research service…</p>
-    <section class="ask card"><form id="chat-form"><label for="question">What do you want to know?</label><div class="prompt-row"><textarea id="question" aria-describedby="status" rows="2" maxlength="2000" placeholder="e.g. What is happening to prime rents in the City?"></textarea><button type="submit" id="ask">Ask <span>↗</span></button></div><label class="context-option"><input type="checkbox" id="use-context"> Use previous question as context</label><div class="examples" id="examples"><button type="button">Compare prime rents across City and West End</button><button type="button">What is the current vacancy picture?</button><button type="button">Summarise new office supply</button></div></form><p class="status" id="status" aria-live="polite"></p><button type="button" id="stop" class="stop hidden">Stop research</button></section>
+    <section class="ask card"><form id="chat-form"><label for="question">Start with a business question</label><div class="prompt-row"><textarea id="question" aria-describedby="status" rows="2" maxlength="2000" placeholder="e.g. What changed versus the previous period?"></textarea><button type="submit" id="ask">Ask <span>↗</span></button></div><label class="context-option"><input type="checkbox" id="use-context"> Continue this conversation</label><div class="workflows" id="examples" aria-label="Research workflows"><button type="button" data-workflow="monitor" data-question="What changed versus the previous period?"><b>Monitor</b><span>What changed and why it matters</span></button><button type="button" data-workflow="investigate" data-question="Is West End outperforming City?"><b>Investigate</b><span>Test a market hypothesis</span></button><button type="button" data-workflow="prepare" data-question="Give me the five most important developments this month."><b>Prepare</b><span>Build a meeting brief</span></button></div><div class="examples"><button type="button">What evidence supports flight-to-quality?</button><button type="button">Where do the sources disagree?</button><button type="button" id="new-research">Start new research</button></div></form><p class="status" id="status" aria-live="polite"></p><button type="button" id="stop" class="stop hidden">Stop research</button></section>
     <details id="activity" class="activity card hidden">
       <summary id="activity-summary">Research activity</summary>
       <p id="activity-question" class="activity-question"></p>
@@ -21,6 +21,6 @@
     <section class="dashboard"><div class="section-head"><div><p class="eyebrow">MARKET SNAPSHOT</p><h2>Key indicators</h2></div><button type="button" id="refresh" class="examples button">Refresh data</button></div><p id="refresh-status" class="status" aria-live="polite"></p><section id="briefing" class="card hidden" aria-live="polite"></section><div id="metrics" class="metrics" tabindex="0" role="region" aria-label="Market indicators; scroll horizontally on narrow screens"><div class="skeleton"></div></div><details id="sources" class="source-library"><summary>Collected sources</summary></details></section>
   </main>
   <footer>London Market Monitor <span>·</span> Built for evidence-led decisions</footer>
-  <script src="/static/app.js?v=6"></script>
+  <script src="/static/app.js?v=8"></script>
 </body>
 </html>

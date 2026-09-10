@@ -161,7 +161,9 @@ def test_document_windows_superseded_baselines_and_full_metric_snapshot():
             ]
         )
         report, refs = change_evidence(service, ChangeQuery())
-        assert len([e for e in refs if e.category in {"metrics", "calculation"}]) == 206
+        assert len([e for e in refs
+                    if e.id.startswith(("calc:change:", "observation:change:"))]) == 206
+        assert any(e.id.startswith("mismatch:") for e in refs)
         service.store.connection.execute("UPDATE sources SET published_at=NULL WHERE id='old'")
         report, refs = change_evidence(service, ChangeQuery(period="2026-Q2"))
         assert not report["baseline"]  # A numerical baseline exists despite missing text dates.

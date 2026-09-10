@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 from pptx import Presentation
@@ -45,7 +44,7 @@ def base(prs, number, section, title, dark=False):
         0.4,
         8,
         0.25,
-        f"LONDON MARKET MONITOR  /  {section.upper()}  ·  LIVE RESEARCH",
+        f"LONDON MARKET MONITOR  /  {section.upper()}  ·  MARKET INTELLIGENCE",
         9,
         TEAL if not dark else RGBColor(164, 212, 205),
         True,
@@ -79,167 +78,67 @@ def build():
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
-    example_path = Path("deliverables/live-run.json")
-    example = json.loads(example_path.read_text()) if example_path.exists() else None
-    s = base(prs, 1, "the decision", "What changed — and what does it mean for a lease?")
-    box(
-        s,
-        0.8,
-        2.25,
-        6.2,
-        1.5,
-        "Discover reports.\nCompare the evidence.",
-        32,
-        NAVY,
-        True,
-        "Georgia",
-    )
-    box(
-        s,
-        0.82,
-        4.3,
-        6.0,
-        1.3,
-        "Bring rents, demand, supply and macro context into one research conversation, "
-        "with the source trail attached.",
-        18,
-        MUTED,
-    )
-    card(
-        s,
-        8.0,
-        2.2,
-        4.5,
-        3.5,
-        "Business question",
-        "Where is occupier demand strengthening, and could constrained quality supply "
-        "change the timing or terms of our next leasing decision?",
-    )
-    s = base(prs, 2, "workflow", "One bounded research loop", True)
+    s = base(prs, 1, "the problem", "Too much reading. Too little time to interpret.")
+    box(s, 0.8, 2.2, 6.1, 1.7, "Reports, headlines, macro data.\nOne decision to prepare for.",
+        31, NAVY, True, "Georgia")
+    box(s, 0.82, 4.35, 5.9, 1.3,
+        "Teams repeatedly find reports, reconcile periods and rebuild the same evidence trail. "
+        "The important change can be buried in a familiar market summary.", 18, MUTED)
+    card(s, 7.5, 2.2, 5.0, 3.7, "The business outcome",
+         "Move from raw information to important changes, plausible drivers and implications "
+         "worth investigating.\n\nBring the evidence into the meeting, "
+         "with the uncertainty intact.")
+    s = base(prs, 2, "the workflow", "Ask what changed. Leave ready to discuss it.", True)
     for x, heading, body in [
-        (0.8, "DISCOVER", "Find broker, official and developer reports"),
-        (3.35, "READ", "Extract public pages and text PDFs"),
-        (5.9, "COMPARE", "Retrieve passages; align definitions and periods"),
-        (8.45, "EXPLAIN", "Separate reported facts from implications"),
-        (11.0, "CHECK", "Open citations and inspect missing evidence"),
+        (0.8, "Monitor", "What happened since I last checked?\n\nMaterial movements, new "
+         "evidence and changing risks, compared with an explicit baseline."),
+        (4.85, "Investigate", "I heard West End is outperforming City. Is it true?\n\nTest "
+         "the claim across rents, vacancy, demand, supply and commentary."),
+        (8.9, "Prepare", "What belongs in my meeting brief?\n\nUp to five developments, "
+         "their business implications and the sources to verify them."),
     ]:
-        card(s, x, 2.3, 2.0, 3.0, heading, body, RGBColor(164, 212, 205), True)
-    box(
-        s,
-        0.85,
-        5.85,
-        11.5,
-        0.65,
-        "z.ai chooses tools • DDGS + Crawl4AI reads sources • FastEmbed + Qdrant retrieves • "
-        "SQLite preserves observations",
-        13,
-        RGBColor(174, 200, 198),
-    )
-    s = base(prs, 3, "live check", "A recorded run, with its limits visible")
-    if example:
-        response = example["response"]
-        claims = response.get("claims", [])
-        chosen = claims[:1] + [c for c in claims if c["kind"] == "interpretation"][:1]
-        summary = "\n\n".join(c["text"] for c in chosen)[:680]
-        card(s, 0.8, 2.1, 7.0, 3.9, "Actual model answer", summary or response["answer"][:530])
-        card(
-            s,
-            8.2,
-            2.1,
-            4.3,
-            3.9,
-            "Evidence trail",
-            f"{len(response['citations'])} cited source(s) · incomplete\n"
-            + "\n".join(dict.fromkeys(response["trace"]["tools"]))
-            + "\n\nDirectly ingested public report. Local vector check. "
-            "Firecrawl was not used in this run.",
-        )
-    else:
-        card(
-            s,
-            0.8,
-            2.1,
-            5.6,
-            3.8,
-            "Verified independently",
-            "Configured z.ai completed a two-step tool conversation.\n\n"
-            "Real semantic embeddings retrieved a paraphrase and survived reopening.",
-        )
-        card(
-            s,
-            6.8,
-            2.1,
-            5.6,
-            3.8,
-            "Live example blocked",
-            "Host disk exhaustion caused Docker storage errors.\n\n"
-            "No end-to-end live report answer is presented as completed.",
-        )
-    if example:
-        box(s, 0.85, 6.45, 11.6, 0.5, "Source: " + example["source"]["url"], 10, MUTED)
-    s = base(prs, 4, "change briefing", "Separate a changed market from a changed source", True)
-    for i, (heading, body) in enumerate(
-        [
-            (
-                "New report",
-                "Discoveries establish coverage; they do not alone prove market movement.",
-            ),
-            (
-                "Revised content",
-                "Same URL, different checksum: retain both versions and source IDs.",
-            ),
-            (
-                "Comparable change",
-                "Match units, periods and definitions; calculate differences in code.",
-            ),
-            (
-                "Business implication",
-                "Qualify timing and supply risks; expose disagreement and collection gaps.",
-            ),
-        ]
-    ):
-        card(
-            s,
-            0.8 + (i % 2) * 6.05,
-            2.15 + (i // 2) * 1.95,
-            5.35,
-            1.8,
-            heading,
-            body,
-            RGBColor(164, 212, 205),
-            True,
-        )
-    s = base(prs, 5, "readiness", "Implemented; full live readiness still needs verification")
-    card(
-        s,
-        0.8,
-        2.1,
-        3.65,
-        3.8,
-        "Delivered",
-        "Tool-driven chat\nSemantic evidence\nManual refresh + briefing\n"
-        "Source versions + citations\nExplicit demo isolation",
-    )
-    card(
-        s,
-        4.85,
-        2.1,
-        3.65,
-        3.8,
-        "Verified",
-        "Automated grounding tests\nDeterministic evaluation\n"
-        "Real model tool calls\nReal semantic retrieval\nCompose configuration",
-    )
-    card(
-        s,
-        8.9,
-        2.1,
-        3.65,
-        3.8,
-        "Remaining blocker",
-        "Free host disk capacity and restore Docker health.\n\n"
-        "Verify DuckDuckGo search, Crawl4AI HTML/PDF extraction and source freshness.",
-    )
+        card(s, x, 2.2, 3.65, 3.6, heading, body, RGBColor(164, 212, 205), True)
+    box(s, 0.85, 6.1, 11.7, 0.6,
+        "Follow the thread: expand a point  →  inspect the evidence  →  compare last quarter  "
+        "→  decide what to watch", 15, CREAM)
+    s = base(prs, 3, "example investigation", "Is West End outperforming City?")
+    card(s, 0.8, 2.15, 5.55, 3.95, "Test the hypothesis",
+         "Rents: compare growth, not just rent levels.\n"
+         "Vacancy: align coverage and Grade A definitions.\n"
+         "Take-up: compare the same reporting periods.\n"
+         "Supply: distinguish future space from pre-lets.\n"
+         "Commentary + macro: look for drivers and counterevidence.")
+    card(s, 6.8, 2.15, 5.7, 3.95, "A useful conclusion",
+         "Supported · Partially supported\nNot supported · Insufficient evidence\n\n"
+         "Explain which indicators support the claim, which challenge it and what is missing. "
+         "Keep facts separate from interpretation.")
+    box(s, 0.85, 6.35, 11.7, 0.55,
+        "Investigation design shown here; this slide does not assert a current market verdict.",
+        12, MUTED)
+    s = base(prs, 4, "trust", "Every important claim has a trail back to evidence.", True)
+    for i, (heading, body) in enumerate([
+        ("Show the calculation", "Source values, units and reporting periods alongside "
+         "derived deltas. Transparent screening thresholds."),
+        ("Keep disagreement", "Different numbers, definitions or dates remain visible. "
+         "Conflicting reports are never averaged into one answer."),
+        ("Explain possible drivers", "Cited facts are separate from interpretation. "
+         "Consistency and correlation are not proof of causation."),
+        ("Make verification quick", "Open the publisher, title, date, URL and relevant passage. "
+         "Missing evidence stays visible, including unsupported forecasts."),
+    ]):
+        card(s, 0.8 + i % 2 * 6.05, 2.15 + i // 2 * 2.0, 5.35, 1.85,
+             heading, body, RGBColor(164, 212, 205), True)
+    s = base(prs, 5, "from poc to practice", "Prove the research workflow. Then automate it.")
+    card(s, 0.8, 2.15, 3.65, 3.9, "PoC today",
+         "On-demand market briefs\nHypothesis investigations\nSource-backed watchlists\n"
+         "Manual evidence refresh\n\nImplications to investigate, not investment recommendations.")
+    card(s, 4.85, 2.15, 3.65, 3.9, "Measure the value",
+         "Time to a usable meeting brief\nTime to verify a claim\n"
+         "Material developments found\nMissing or disputed evidence exposed\n\n"
+         "Compare with the team's manual research baseline; no savings are claimed yet.")
+    card(s, 8.9, 2.15, 3.65, 3.9, "Next, after validation",
+         "Automated monitoring\nMaterial-change alerts\nPrivate reports and leasing data\n"
+         "Team-specific watchlists\n\nPrioritize additions using observed workflow needs.")
     OUT.parent.mkdir(exist_ok=True)
     prs.save(OUT)
 
